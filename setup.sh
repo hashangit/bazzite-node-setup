@@ -486,6 +486,13 @@ main() {
         exit 1
     }
 
+    # Install base dependencies in container (CRITICAL - must run before tool installation)
+    install_container_dependencies || {
+        log_error "Failed to install container dependencies"
+        echo -e "\n${RED}Setup failed. Check $LOG_FILE for details.${NC}"
+        exit 1
+    }
+
     # Install all selected tools
     install_all_tools
 

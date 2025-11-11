@@ -197,11 +197,11 @@ install_container_dependencies() {
 
         # Update package lists
         echo "Updating package lists..."
-        apt-get update -qq
+        sudo apt-get update -qq
 
         # Install essential packages
         echo "Installing essential packages..."
-        apt-get install -y -qq --no-install-recommends \
+        sudo apt-get install -y -qq --no-install-recommends \
             curl \
             wget \
             git \
