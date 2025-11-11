@@ -134,13 +134,18 @@ install_nvm() {
         # Using -v flag to explicitly unset the variable (not function)
         unset -v NVM_DIR 2>/dev/null || true
 
-        # Check if NVM already installed
-        if [ -d "$HOME/.nvm" ]; then
-            echo "NVM already installed"
-            exit 0
+        # Remove any existing NVM installations to force fresh install
+        # Check both default (~/.nvm) and XDG config (~/.config/nvm) locations
+        echo "Checking for existing NVM installations..."
+        if [ -d "$HOME/.nvm" ] || [ -d "$HOME/.config/nvm" ]; then
+            echo "Found existing NVM installation, removing for fresh install..."
+            rm -rf "$HOME/.nvm" "$HOME/.config/nvm"
+            # Also remove any NVM entries from shell configs that might set wrong NVM_DIR
+            sed -i '/NVM_DIR/d' "$HOME/.bashrc" 2>/dev/null || true
+            sed -i '/NVM_DIR/d' "$HOME/.zshrc" 2>/dev/null || true
         fi
 
-        # Install NVM
+        # Install NVM (will install to ~/.nvm by default)
         echo "Downloading NVM..."
         curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash
 
@@ -153,7 +158,7 @@ install_nvm() {
             . "$NVM_DIR/nvm.sh"
             echo "NVM loaded successfully"
         else
-            echo "ERROR: NVM installation script did not create nvm.sh"
+            echo "ERROR: NVM installation script did not create nvm.sh at $NVM_DIR"
             exit 1
         fi
 
@@ -166,7 +171,8 @@ install_nvm() {
         fi
     '
 
-    if distrobox enter "$CONTAINER_NAME" -- bash -c "$install_nvm" >> "$LOG_FILE" 2>&1; then
+    # Unset NVM_DIR before entering container to prevent environment leak
+    if distrobox enter "$CONTAINER_NAME" -- env -u NVM_DIR bash -c "$install_nvm" >> "$LOG_FILE" 2>&1; then
         local nvm_version
         nvm_version=$(distrobox enter "$CONTAINER_NAME" -- bash -lc 'export NVM_DIR="$HOME/.nvm"; [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"; nvm --version' 2>&1 || echo "unknown")
         log_success "NVM version $nvm_version installed"
