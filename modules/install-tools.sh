@@ -181,10 +181,12 @@ install_pnpm() {
             exit 0
         fi
 
-        # Install pnpm globally via npm (needs sudo for system-wide install)
-        sudo npm install -g pnpm
+        # Use Corepack (built into Node.js) to enable pnpm
+        # This is the official recommended method - no sudo needed
+        echo "Enabling pnpm via Corepack..."
+        corepack enable
 
-        # Verify
+        # Verify pnpm is now available
         pnpm --version
     '
 
