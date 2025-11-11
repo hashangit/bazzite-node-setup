@@ -1,0 +1,24 @@
+# Logs
+*.log
+setup.log
+test-results.log
+debug.log
+
+# Scripts created during setup
+verify-setup.sh
+uninstall.sh
+
+# Temporary files
+*.tmp
+*.temp
+.DS_Store
+
+# Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+Thumbs.db
