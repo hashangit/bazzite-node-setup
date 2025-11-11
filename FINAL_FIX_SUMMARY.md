@@ -32,27 +32,37 @@ All installation failures have been identified, fixed, and merged into the main 
 - Changed: `nvm install '$NODE_VERSION'` → `nvm install --lts`
 - Changed: `nvm use '$NODE_VERSION'` → `nvm use --lts`
 
-### Bug #3: NVM_DIR Environment Variable Leak
+### Bug #3: NVM_DIR Environment Variable Leak + Existing Installation
 **Severity:** P0 - CRITICAL
-**Impact:** NVM install script refused to run
+**Impact:** NVM install script refused to run OR tried to update instead of fresh install
 
-**Error Message:**
+**Error Messages:**
 ```
 You have $NVM_DIR set to "/var/home/hashan/.nvm", but that directory does not exist.
 ```
+OR
+```
+=> nvm is already installed in /var/home/hashan/.config/nvm, trying to update using git
+=> Installing Node.js version lts
+Version 'lts' not found - try `nvm ls-remote` to browse available versions.
+ERROR: NVM installation script did not create nvm.sh
+```
 
-**Root Cause:**
-- Host shell has NVM_DIR environment variable set
-- When entering container, variable leaks through
-- NVM install script sees it's set but directory doesn't exist
-- Install script refuses to proceed (protection mechanism)
+**Root Causes:**
+1. Host shell has NVM_DIR environment variable set
+2. When entering container, variable leaks through
+3. **CRITICAL**: Previous failed installations left NVM in `~/.config/nvm` (non-standard location)
+4. Our check for `~/.nvm` passed, but NVM existed at `~/.config/nvm`
+5. NVM install script detected existing installation and tried UPDATE instead of fresh install
+6. Updated NVM had stale config causing Node.js installation to fail
 
-**Fix:** Unset NVM_DIR before installation
-- File: `modules/install-tools.sh` (lines 132-135)
+**Fix:** Multi-layered approach
+- File: `modules/install-tools.sh` (lines 132-170)
+- Added: `env -u NVM_DIR` to distrobox command to prevent environment leak
 - Added: `unset -v NVM_DIR 2>/dev/null || true` at start of install script
-- The `-v` flag explicitly unsets the variable (not function)
-- Error suppression ensures script continues even if variable doesn't exist
-- Allows fresh installation
+- Added: Check and remove BOTH `~/.nvm` AND `~/.config/nvm` before installation
+- Added: Clean NVM_DIR entries from shell configs
+- Forces fresh installation to default `~/.nvm` location every time
 
 ### Bug #4: Duplicate Error Handling Code
 **Severity:** P3 - LOW (Code Quality)
@@ -123,6 +133,8 @@ Expected Success Rate: 9/9 tools (100%) ✅
 6. **ae20ca6** - Merge: Fix all installation failures (PR #3)
 7. **ba0cb41** - Add final summary of all bugfixes and testing instructions
 8. **4ef01b0** - Improve NVM_DIR unset robustness with -v flag
+9. **37e9888** - Update FINAL_FIX_SUMMARY with latest improvement and verification step
+10. **ec2eb23** - CRITICAL FIX: Remove existing NVM installations before fresh install
 
 ---
 
@@ -171,15 +183,17 @@ uv --version      # Should show version
 **During Installation:**
 1. ✅ "Installing container dependencies..." appears
 2. ✅ "Container dependencies installed"
-3. ✅ "Downloading NVM..." (no errors)
-4. ✅ "NVM loaded successfully"
-5. ✅ "NVM version 0.40.1 installed"
-6. ✅ "Installing Node.js..."
-7. ✅ "Node.js vXX.X.X installed"
-8. ✅ "npm version X.X.X installed"
-9. ✅ "Installing pnpm..."
-10. ✅ "pnpm version X.X.X installed"
-11. ✅ "GitHub CLI version 2.83.0 installed"
+3. ✅ "Checking for existing NVM installations..." (NEW!)
+4. ✅ "Found existing NVM installation, removing for fresh install..." (if you had old NVM)
+5. ✅ "Downloading NVM..." (no errors)
+6. ✅ "NVM loaded successfully"
+7. ✅ "NVM version 0.40.1 installed"
+8. ✅ "Installing Node.js..."
+9. ✅ "Node.js vXX.X.X installed"
+10. ✅ "npm version X.X.X installed"
+11. ✅ "Installing pnpm..."
+12. ✅ "pnpm version X.X.X installed"
+13. ✅ "GitHub CLI version 2.83.0 installed"
 
 **After Installation:**
 - All 8 tools should be accessible from host
