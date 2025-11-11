@@ -181,8 +181,8 @@ install_pnpm() {
             exit 0
         fi
 
-        # Install pnpm globally via npm
-        npm install -g pnpm
+        # Install pnpm globally via npm (needs sudo for system-wide install)
+        sudo npm install -g pnpm
 
         # Verify
         pnpm --version
