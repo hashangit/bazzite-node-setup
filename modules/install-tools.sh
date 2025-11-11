@@ -219,45 +219,30 @@ install_nodejs() {
 
         . "$NVM_DIR/nvm.sh"
 
-        echo "=== DEFINITIVE FIX for .npmrc conflicts with NVM ==="
+        echo "=== FIX: Remove .npmrc before NVM install ==="
 
-        # Step 1: Backup ALL .npmrc files
-        echo "Backing up .npmrc files..."
-        [ -f "$HOME/.npmrc" ] && cp "$HOME/.npmrc" "$HOME/.npmrc.backup.$(date +%s)"
+        # The problem: NVM checks .npmrc BEFORE installing Node.js
+        # If .npmrc has prefix/globalconfig, NVM refuses to proceed
+        # Solution: Completely remove .npmrc, let NVM/npm create a clean one
 
-        # Step 2: If npm already exists (from system or previous install),
-        # use it to properly delete conflicting settings from ALL config locations
-        if command -v npm &> /dev/null; then
-            echo "Found existing npm, removing conflicting configs..."
-            npm config delete prefix 2>/dev/null || true
-            npm config delete globalconfig 2>/dev/null || true
-            echo "Conflicting npm configs removed"
-        fi
-
-        # Step 3: Clean the user .npmrc file manually as well (belt and suspenders)
         if [ -f "$HOME/.npmrc" ]; then
-            echo "Cleaning $HOME/.npmrc..."
-            # Remove prefix and globalconfig lines
-            sed -i.bak "/^prefix=/d; /^globalconfig=/d" "$HOME/.npmrc"
-            echo "User .npmrc cleaned"
+            echo "Found $HOME/.npmrc, backing up and removing..."
+            cp "$HOME/.npmrc" "$HOME/.npmrc.pre-nvm-backup"
+            rm -f "$HOME/.npmrc"
+            echo ".npmrc removed (backup: ~/.npmrc.pre-nvm-backup)"
         fi
 
-        # Step 4: Unset npm environment variables that might interfere
-        unset npm_config_prefix
-        unset NPM_CONFIG_PREFIX
-        unset npm_config_globalconfig
-        unset NPM_CONFIG_GLOBALCONFIG
+        # Unset environment variables that npm might read
+        unset npm_config_prefix NPM_CONFIG_PREFIX
+        unset npm_config_globalconfig NPM_CONFIG_GLOBALCONFIG
 
-        # Step 5: Install Node.js LTS in clean environment
+        # Install Node.js LTS in completely clean environment
         echo "Installing Node.js LTS via NVM..."
         nvm install --lts
 
-        # Step 6: Use with --delete-prefix flag to ensure any remaining prefix is removed
-        echo "Activating Node.js..."
-        nvm use --delete-prefix --lts || nvm use --lts
-
-        # Step 7: Set default alias
+        # Set default and activate
         nvm alias default node
+        nvm use default
 
         # Verify installation
         echo "=== Verification ==="
