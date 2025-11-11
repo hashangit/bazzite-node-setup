@@ -118,107 +118,33 @@ install_uv() {
 # Node.js Stack Installation
 ################################################################################
 
-install_nvm() {
-    if [ "$INSTALL_NODEJS" != true ]; then
-        log "Skipping NVM installation (not selected)"
-        return 0
-    fi
-
-    log_step "Installing NVM (Node Version Manager)..."
-
-    local install_nvm='
-        set -e
-
-        # CRITICAL: Unset NVM_DIR if set (prevents install script from failing)
-        # The host may have NVM_DIR set, which confuses the install script
-        # Using -v flag to explicitly unset the variable (not function)
-        unset -v NVM_DIR 2>/dev/null || true
-
-        # Remove any existing NVM installations to force fresh install
-        # Check both default (~/.nvm) and XDG config (~/.config/nvm) locations
-        echo "Checking for existing NVM installations..."
-        if [ -d "$HOME/.nvm" ] || [ -d "$HOME/.config/nvm" ]; then
-            echo "Found existing NVM installation, removing for fresh install..."
-            rm -rf "$HOME/.nvm" "$HOME/.config/nvm"
-            # Also remove any NVM entries from shell configs that might set wrong NVM_DIR
-            sed -i '/NVM_DIR/d' "$HOME/.bashrc" 2>/dev/null || true
-            sed -i '/NVM_DIR/d' "$HOME/.zshrc" 2>/dev/null || true
-        fi
-
-        # Install NVM (will install to ~/.nvm by default)
-        echo "Downloading NVM..."
-        curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash
-
-        # Wait a moment for installation to complete
-        sleep 2
-
-        # Load NVM (must be in same shell session)
-        export NVM_DIR="$HOME/.nvm"
-        if [ -s "$NVM_DIR/nvm.sh" ]; then
-            . "$NVM_DIR/nvm.sh"
-            echo "NVM loaded successfully"
-        else
-            echo "ERROR: NVM installation script did not create nvm.sh at $NVM_DIR"
-            exit 1
-        fi
-
-        # Verify NVM is available
-        if command -v nvm > /dev/null 2>&1; then
-            nvm --version
-        else
-            echo "ERROR: nvm command not available after sourcing"
-            exit 1
-        fi
-    '
-
-    # Unset NVM_DIR before entering container to prevent environment leak
-    if distrobox enter "$CONTAINER_NAME" -- env -u NVM_DIR bash -c "$install_nvm" >> "$LOG_FILE" 2>&1; then
-        local nvm_version
-        nvm_version=$(distrobox enter "$CONTAINER_NAME" -- bash -lc 'export NVM_DIR="$HOME/.nvm"; [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"; nvm --version' 2>&1 || echo "unknown")
-        log_success "NVM version $nvm_version installed"
-        record_tool_status "nvm" "success" "$nvm_version"
-        return 0
-    else
-        log_error "Failed to install NVM"
-        record_tool_status "nvm" "failed" "N/A" "Installation failed"
-        RECOVERY_ACTIONS["nvm"]="Install manually: curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash"
-        return 1
-    fi
-}
-
 install_nodejs() {
     if [ "$INSTALL_NODEJS" != true ]; then
         log "Skipping Node.js installation (not selected)"
         return 0
     fi
 
-    log_step "Installing Node.js..."
+    log_step "Installing Node.js LTS (via NodeSource)..."
 
-    # Use --lts directly instead of variable that won't expand in container
     local install_node='
         set -e
 
-        # Load NVM
-        export NVM_DIR="$HOME/.nvm"
-        [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
+        # Install Node.js LTS via NodeSource repository (simple and reliable)
+        echo "Setting up NodeSource repository..."
+        curl -fsSL https://deb.nodesource.com/setup_lts.x | sudo -E bash -
 
-        # Install Node.js LTS (may show .npmrc warning)
-        nvm install --lts || true
+        echo "Installing Node.js and npm..."
+        sudo apt-get install -y nodejs
 
-        # Get the installed version and activate with --delete-prefix
-        NODE_VER=$(nvm version lts/*)
-        nvm use --delete-prefix "$NODE_VER"
-        nvm alias default node
-
-        # Verify
+        # Verify installation
         node --version
         npm --version
     '
 
     if distrobox enter "$CONTAINER_NAME" -- bash -c "$install_node" >> "$LOG_FILE" 2>&1; then
         local node_version npm_version
-        node_version=$(distrobox enter "$CONTAINER_NAME" -- bash -lc 'export NVM_DIR="$HOME/.nvm"; [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"; node --version' 2>&1 || echo "unknown")
-        npm_version=$(distrobox enter "$CONTAINER_NAME" -- bash -lc 'export NVM_DIR="$HOME/.nvm"; [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"; npm --version' 2>&1 || echo "unknown")
+        node_version=$(distrobox enter "$CONTAINER_NAME" -- node --version 2>&1 || echo "unknown")
+        npm_version=$(distrobox enter "$CONTAINER_NAME" -- npm --version 2>&1 || echo "unknown")
 
         log_success "Node.js $node_version installed"
         log_success "npm $npm_version installed"
@@ -232,7 +158,7 @@ install_nodejs() {
         record_tool_status "node" "failed" "N/A" "Installation failed"
         record_tool_status "npm" "failed" "N/A" "Installation failed"
         record_tool_status "npx" "failed" "N/A" "Installation failed"
-        RECOVERY_ACTIONS["node"]="Enter container and run: nvm install --lts"
+        RECOVERY_ACTIONS["node"]="Enter container and run: curl -fsSL https://deb.nodesource.com/setup_lts.x | sudo bash - && sudo apt-get install -y nodejs"
         return 1
     fi
 }
@@ -248,10 +174,6 @@ install_pnpm() {
     local install_pnpm='
         set -e
 
-        # Load NVM
-        export NVM_DIR="$HOME/.nvm"
-        [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
-
         # Check if already installed
         if command -v pnpm &> /dev/null; then
             echo "pnpm already installed"
@@ -259,7 +181,7 @@ install_pnpm() {
             exit 0
         fi
 
-        # Install pnpm
+        # Install pnpm globally via npm
         npm install -g pnpm
 
         # Verify
@@ -268,7 +190,7 @@ install_pnpm() {
 
     if distrobox enter "$CONTAINER_NAME" -- bash -c "$install_pnpm" >> "$LOG_FILE" 2>&1; then
         local pnpm_version
-        pnpm_version=$(distrobox enter "$CONTAINER_NAME" -- bash -lc 'export NVM_DIR="$HOME/.nvm"; [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"; pnpm --version' 2>&1 || echo "unknown")
+        pnpm_version=$(distrobox enter "$CONTAINER_NAME" -- pnpm --version 2>&1 || echo "unknown")
         log_success "pnpm $pnpm_version installed"
         record_tool_status "pnpm" "success" "$pnpm_version"
         return 0
@@ -332,16 +254,13 @@ install_all_tools() {
     local completed_steps=0
 
     # Count steps
-    [ "$INSTALL_NODEJS" == true ] && total_steps=$((total_steps + 4))  # nvm, node, pnpm, bun
+    [ "$INSTALL_NODEJS" == true ] && total_steps=$((total_steps + 3))  # node, pnpm, bun
     [ "$INSTALL_PYTHON" == true ] && total_steps=$((total_steps + 1))  # uv
     [ "$INSTALL_GIT" == true ] && total_steps=$((total_steps + 1))     # git
     [ "$INSTALL_GITHUB_CLI" == true ] && total_steps=$((total_steps + 1))  # gh
 
     # Node.js stack
     if [ "$INSTALL_NODEJS" == true ]; then
-        install_nvm && ((completed_steps++))
-        progress_bar $completed_steps $total_steps
-
         install_nodejs && ((completed_steps++))
         progress_bar $completed_steps $total_steps
 
@@ -419,5 +338,5 @@ verify_installation() {
 
 # Export functions
 export -f install_git install_github_cli install_uv
-export -f install_nvm install_nodejs install_pnpm install_bun
+export -f install_nodejs install_pnpm install_bun
 export -f install_all_tools verify_installation
