@@ -129,11 +129,6 @@ install_nvm() {
     local install_nvm='
         set -e
 
-        # CRITICAL: Unset NVM_DIR if set (prevents install script from failing)
-        # The host may have NVM_DIR set, which confuses the install script
-        # Using -v flag to explicitly unset the variable (not function)
-        unset -v NVM_DIR 2>/dev/null || true
-
         # Remove any existing NVM installations to force fresh install
         # Check both default (~/.nvm) and XDG config (~/.config/nvm) locations
         echo "Checking for existing NVM installations..."
@@ -145,22 +140,30 @@ install_nvm() {
             sed -i '/NVM_DIR/d' "$HOME/.zshrc" 2>/dev/null || true
         fi
 
-        # Install NVM (will install to ~/.nvm by default)
-        echo "Downloading NVM..."
+        # CRITICAL: Force NVM to install to ~/.nvm (not XDG location)
+        # By setting NVM_DIR before the install script, we override XDG_CONFIG_HOME
+        export NVM_DIR="$HOME/.nvm"
+
+        # Install NVM to our specified location
+        echo "Installing NVM to $NVM_DIR..."
         curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash
 
         # Wait a moment for installation to complete
         sleep 2
 
-        # Load NVM (must be in same shell session)
-        export NVM_DIR="$HOME/.nvm"
-        if [ -s "$NVM_DIR/nvm.sh" ]; then
-            . "$NVM_DIR/nvm.sh"
-            echo "NVM loaded successfully"
-        else
+        # Verify NVM installed to correct location
+        if [ ! -s "$NVM_DIR/nvm.sh" ]; then
             echo "ERROR: NVM installation script did not create nvm.sh at $NVM_DIR"
+            echo "Checking if NVM installed to XDG location instead..."
+            if [ -s "$HOME/.config/nvm/nvm.sh" ]; then
+                echo "ERROR: NVM installed to $HOME/.config/nvm despite NVM_DIR being set"
+            fi
             exit 1
         fi
+
+        # Load NVM (must be in same shell session)
+        . "$NVM_DIR/nvm.sh"
+        echo "NVM loaded successfully from $NVM_DIR"
 
         # Verify NVM is available
         if command -v nvm > /dev/null 2>&1; then
@@ -171,8 +174,8 @@ install_nvm() {
         fi
     '
 
-    # Unset NVM_DIR before entering container to prevent environment leak
-    if distrobox enter "$CONTAINER_NAME" -- env -u NVM_DIR bash -c "$install_nvm" >> "$LOG_FILE" 2>&1; then
+    # Run NVM installation in container
+    if distrobox enter "$CONTAINER_NAME" -- bash -c "$install_nvm" >> "$LOG_FILE" 2>&1; then
         local nvm_version
         nvm_version=$(distrobox enter "$CONTAINER_NAME" -- bash -lc 'export NVM_DIR="$HOME/.nvm"; [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"; nvm --version' 2>&1 || echo "unknown")
         log_success "NVM version $nvm_version installed"
