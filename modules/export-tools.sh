@@ -52,7 +52,7 @@ trap cleanup EXIT TERM INT HUP QUIT
 
 # Run command in container as background process (NOT exec!)
 # This preserves the wrapper shell and its trap handlers
-distrobox-enter -n "CONTAINER_NAME" -- "BINARY_PATH" "$@" &
+distrobox enter -n "CONTAINER_NAME" -- "BINARY_PATH" "$@" &
 CHILD_PID=$!
 
 # Verify process started (wait briefly and check)
@@ -115,13 +115,13 @@ export_nodejs_tools() {
     local exported=0
     local failed=0
 
-    # Get Node.js binary paths using login shell (-lc) for proper environment
+    # Get Node.js binary paths (installed via NodeSource at /usr/bin)
     local node_path npm_path npx_path pnpm_path
 
-    node_path=$(distrobox enter "$CONTAINER_NAME" -- bash -lc 'export NVM_DIR="$HOME/.nvm"; [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"; which node' 2>/dev/null | tr -d '\r\n' | xargs)
-    npm_path=$(distrobox enter "$CONTAINER_NAME" -- bash -lc 'export NVM_DIR="$HOME/.nvm"; [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"; which npm' 2>/dev/null | tr -d '\r\n' | xargs)
-    npx_path=$(distrobox enter "$CONTAINER_NAME" -- bash -lc 'export NVM_DIR="$HOME/.nvm"; [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"; which npx' 2>/dev/null | tr -d '\r\n' | xargs)
-    pnpm_path=$(distrobox enter "$CONTAINER_NAME" -- bash -lc 'export NVM_DIR="$HOME/.nvm"; [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"; which pnpm' 2>/dev/null | tr -d '\r\n' | xargs)
+    node_path=$(distrobox enter "$CONTAINER_NAME" -- which node 2>/dev/null | tr -d '\r\n' | xargs)
+    npm_path=$(distrobox enter "$CONTAINER_NAME" -- which npm 2>/dev/null | tr -d '\r\n' | xargs)
+    npx_path=$(distrobox enter "$CONTAINER_NAME" -- which npx 2>/dev/null | tr -d '\r\n' | xargs)
+    pnpm_path=$(distrobox enter "$CONTAINER_NAME" -- which pnpm 2>/dev/null | tr -d '\r\n' | xargs)
 
     # Validate and export node with process management
     if [ -n "$node_path" ] && [[ "$node_path" =~ ^/ ]]; then

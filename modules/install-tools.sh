@@ -182,9 +182,9 @@ install_pnpm() {
         fi
 
         # Use Corepack (built into Node.js) to enable pnpm
-        # This is the official recommended method - no sudo needed
+        # Corepack needs sudo to create symlinks in /usr/bin
         echo "Enabling pnpm via Corepack..."
-        corepack enable
+        sudo corepack enable
 
         # Verify pnpm is now available
         pnpm --version
