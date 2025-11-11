@@ -226,10 +226,14 @@ install_nodejs() {
         # This will download Node.js (may show .npmrc warning but download succeeds)
         nvm install --lts || true
 
-        # Now activate with --delete-prefix flag to handle any .npmrc conflicts
+        # Get the specific version number that was just installed
+        NODE_VERSION=$(nvm version lts/*)
+        echo "Installed version: $NODE_VERSION"
+
+        # Now activate with --delete-prefix flag using the specific version
         # This is exactly what the error message tells us to do
         echo "Activating Node.js with --delete-prefix..."
-        nvm use --delete-prefix --lts
+        nvm use --delete-prefix "$NODE_VERSION"
 
         # Set as default
         nvm alias default node
