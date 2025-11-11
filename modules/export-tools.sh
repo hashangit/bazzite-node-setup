@@ -6,10 +6,11 @@
 ################################################################################
 
 # Source common functions
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "$(realpath "${BASH_SOURCE[0]}")")/.." && pwd)"
 source "$SCRIPT_DIR/modules/common.sh"
 
 # Export a binary with process-aware wrapper
+# This ensures dev servers terminate when the terminal closes
 export_binary_with_wrapper() {
     local tool_name=$1
     local binary_path=$2
@@ -21,20 +22,53 @@ export_binary_with_wrapper() {
     rm -f "$HOME/.local/bin/$tool_name" 2>/dev/null
 
     # Create process-aware wrapper
-    cat > "$HOME/.local/bin/$tool_name" <<EOF
+    # IMPORTANT: Do NOT use 'exec' as it discards trap handlers
+    cat > "$HOME/.local/bin/$tool_name" <<'WRAPPER_EOF'
 #!/usr/bin/env bash
-# Auto-generated wrapper for $tool_name
+# Auto-generated wrapper for TOOL_NAME
 # Ensures process termination when terminal closes
 
-# Create a process group
+# Create a process group so we can kill all children
 set -m
 
-# Trap terminal close signals
-trap 'kill -- -\$\$ 2>/dev/null' EXIT TERM INT HUP
+# Track the background process PID
+CHILD_PID=""
 
-# Execute in container with same process group
-exec distrobox-enter -n "$container" --  "$binary_path" "\$@"
-EOF
+# Cleanup function to kill process tree
+cleanup() {
+    if [ -n "$CHILD_PID" ]; then
+        # Kill the entire process group
+        kill -- -$CHILD_PID 2>/dev/null || true
+        # Wait a moment for graceful shutdown
+        sleep 0.5
+        # Force kill if still alive
+        kill -9 -- -$CHILD_PID 2>/dev/null || true
+    fi
+    exit
+}
+
+# Trap all terminal close signals
+trap cleanup EXIT TERM INT HUP QUIT
+
+# Run command in container as background process (NOT exec!)
+# This preserves the wrapper shell and its trap handlers
+distrobox-enter -n "CONTAINER_NAME" -- "BINARY_PATH" "$@" &
+CHILD_PID=$!
+
+# Wait for the process to complete
+# This blocks but allows traps to work
+wait $CHILD_PID
+EXIT_CODE=$?
+
+# Clean up and exit with same code
+cleanup
+exit $EXIT_CODE
+WRAPPER_EOF
+
+    # Replace placeholders with actual values
+    sed -i "s|TOOL_NAME|$tool_name|g" "$HOME/.local/bin/$tool_name"
+    sed -i "s|CONTAINER_NAME|$container|g" "$HOME/.local/bin/$tool_name"
+    sed -i "s|BINARY_PATH|$binary_path|g" "$HOME/.local/bin/$tool_name"
 
     chmod +x "$HOME/.local/bin/$tool_name"
 
@@ -48,7 +82,7 @@ EOF
     fi
 }
 
-# Export a tool using distrobox-export (for simple cases)
+# Export a tool using distrobox-export (for simple cases where process management isn't critical)
 export_with_distrobox() {
     local binary_path=$1
     local container=$2
@@ -73,48 +107,60 @@ export_nodejs_tools() {
     local exported=0
     local failed=0
 
-    # Get Node.js binary paths
+    # Get Node.js binary paths using login shell (-lc) for proper environment
     local node_path npm_path npx_path pnpm_path
 
-    node_path=$(distrobox enter "$CONTAINER_NAME" -- bash -lc 'export NVM_DIR="$HOME/.nvm"; [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"; which node' 2>/dev/null | tr -d '\r')
-    npm_path=$(distrobox enter "$CONTAINER_NAME" -- bash -lc 'export NVM_DIR="$HOME/.nvm"; [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"; which npm' 2>/dev/null | tr -d '\r')
-    npx_path=$(distrobox enter "$CONTAINER_NAME" -- bash -lc 'export NVM_DIR="$HOME/.nvm"; [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"; which npx' 2>/dev/null | tr -d '\r')
-    pnpm_path=$(distrobox enter "$CONTAINER_NAME" -- bash -lc 'export NVM_DIR="$HOME/.nvm"; [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"; which pnpm' 2>/dev/null | tr -d '\r')
+    node_path=$(distrobox enter "$CONTAINER_NAME" -- bash -lc 'export NVM_DIR="$HOME/.nvm"; [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"; which node' 2>/dev/null | tr -d '\r\n' | xargs)
+    npm_path=$(distrobox enter "$CONTAINER_NAME" -- bash -lc 'export NVM_DIR="$HOME/.nvm"; [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"; which npm' 2>/dev/null | tr -d '\r\n' | xargs)
+    npx_path=$(distrobox enter "$CONTAINER_NAME" -- bash -lc 'export NVM_DIR="$HOME/.nvm"; [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"; which npx' 2>/dev/null | tr -d '\r\n' | xargs)
+    pnpm_path=$(distrobox enter "$CONTAINER_NAME" -- bash -lc 'export NVM_DIR="$HOME/.nvm"; [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"; which pnpm' 2>/dev/null | tr -d '\r\n' | xargs)
 
-    # Export node with process management
-    if [ -n "$node_path" ]; then
+    # Validate and export node with process management
+    if [ -n "$node_path" ] && [[ "$node_path" =~ ^/ ]]; then
         if export_binary_with_wrapper "node" "$node_path" "$CONTAINER_NAME"; then
             ((exported++))
         else
             ((failed++))
         fi
+    else
+        log_warn "✗ node path not found or invalid: '$node_path'"
+        ((failed++))
     fi
 
     # Export npm
-    if [ -n "$npm_path" ]; then
+    if [ -n "$npm_path" ] && [[ "$npm_path" =~ ^/ ]]; then
         if export_binary_with_wrapper "npm" "$npm_path" "$CONTAINER_NAME"; then
             ((exported++))
         else
             ((failed++))
         fi
+    else
+        log_warn "✗ npm path not found or invalid: '$npm_path'"
+        ((failed++))
     fi
 
     # Export npx
-    if [ -n "$npx_path" ]; then
+    if [ -n "$npx_path" ] && [[ "$npx_path" =~ ^/ ]]; then
         if export_binary_with_wrapper "npx" "$npx_path" "$CONTAINER_NAME"; then
             ((exported++))
         else
             ((failed++))
         fi
+    else
+        log_warn "✗ npx path not found or invalid: '$npx_path'"
+        ((failed++))
     fi
 
     # Export pnpm
-    if [ -n "$pnpm_path" ]; then
+    if [ -n "$pnpm_path" ] && [[ "$pnpm_path" =~ ^/ ]]; then
         if export_binary_with_wrapper "pnpm" "$pnpm_path" "$CONTAINER_NAME"; then
             ((exported++))
         else
             ((failed++))
         fi
+    else
+        log_warn "✗ pnpm path not found or invalid: '$pnpm_path'"
+        ((failed++))
     fi
 
     # Export bun
@@ -125,6 +171,9 @@ export_nodejs_tools() {
         else
             ((failed++))
         fi
+    else
+        log_warn "✗ bun not found at $bun_path"
+        ((failed++))
     fi
 
     # Export bunx
@@ -135,13 +184,16 @@ export_nodejs_tools() {
         else
             ((failed++))
         fi
+    else
+        log_warn "✗ bunx not found at $bunx_path"
+        ((failed++))
     fi
 
     log_success "Exported $exported Node.js tools, $failed failed"
 
     if [ $failed -gt 0 ]; then
-        log_warn "Some Node.js exports failed"
-        RECOVERY_ACTIONS["node-exports"]="Run: cd $SCRIPT_DIR && ./modules/export-tools.sh"
+        log_warn "Some Node.js exports failed - check logs for details"
+        RECOVERY_ACTIONS["node-exports"]="Tools available in container. Access with: distrobox enter $CONTAINER_NAME"
         return 1
     fi
 
@@ -157,9 +209,10 @@ export_git_tools() {
     log_step "Exporting Git..."
 
     local git_path
-    git_path=$(distrobox enter "$CONTAINER_NAME" -- which git 2>/dev/null | tr -d '\r')
+    git_path=$(distrobox enter "$CONTAINER_NAME" -- which git 2>/dev/null | tr -d '\r\n' | xargs)
 
-    if [ -n "$git_path" ]; then
+    # Validate path
+    if [ -n "$git_path" ] && [[ "$git_path" =~ ^/ ]]; then
         if export_binary_with_wrapper "git" "$git_path" "$CONTAINER_NAME"; then
             local git_version
             git_version=$(distrobox enter "$CONTAINER_NAME" -- git --version 2>&1 | grep -oP '\d+\.\d+\.\d+' | head -1 || echo "unknown")
@@ -169,7 +222,7 @@ export_git_tools() {
         fi
     fi
 
-    log_error "Failed to export Git"
+    log_error "Failed to export Git - path not found or invalid"
     record_tool_status "git" "failed" "N/A" "Export failed"
     return 1
 }
@@ -183,9 +236,10 @@ export_github_cli() {
     log_step "Exporting GitHub CLI..."
 
     local gh_path
-    gh_path=$(distrobox enter "$CONTAINER_NAME" -- which gh 2>/dev/null | tr -d '\r')
+    gh_path=$(distrobox enter "$CONTAINER_NAME" -- which gh 2>/dev/null | tr -d '\r\n' | xargs)
 
-    if [ -n "$gh_path" ]; then
+    # Validate path
+    if [ -n "$gh_path" ] && [[ "$gh_path" =~ ^/ ]]; then
         if export_binary_with_wrapper "gh" "$gh_path" "$CONTAINER_NAME"; then
             local gh_version
             gh_version=$(distrobox enter "$CONTAINER_NAME" -- gh --version 2>&1 | head -1 | grep -oP '\d+\.\d+\.\d+' || echo "unknown")
@@ -195,7 +249,7 @@ export_github_cli() {
         fi
     fi
 
-    log_error "Failed to export GitHub CLI"
+    log_error "Failed to export GitHub CLI - path not found or invalid"
     record_tool_status "gh" "failed" "N/A" "Export failed"
     return 1
 }
@@ -220,7 +274,7 @@ export_python_tools() {
         fi
     fi
 
-    log_error "Failed to export UV"
+    log_error "Failed to export UV - not found or export failed"
     record_tool_status "uv" "failed" "N/A" "Export failed"
     return 1
 }
@@ -228,8 +282,12 @@ export_python_tools() {
 export_all_tools() {
     log_step "Exporting all tools to host..."
 
+    # Ensure ~/.local/bin exists
+    mkdir -p "$HOME/.local/bin"
+
     local success=true
 
+    # Export each tool category
     export_nodejs_tools || success=false
     export_git_tools || success=false
     export_github_cli || success=false
@@ -239,7 +297,7 @@ export_all_tools() {
         log_success "All tools exported successfully"
         return 0
     else
-        log_warn "Some tools failed to export"
+        log_warn "Some tools failed to export - check details above"
         return 1
     fi
 }

@@ -199,11 +199,32 @@ show_tool_selection_menu() {
     echo "The following will be configured:"
     echo ""
 
-    [ "$INSTALL_NODEJS" == true ] && echo -e "${GREEN}✓${NC} Node.js Development Stack"
-    [ "$INSTALL_PYTHON" == true ] && echo -e "${GREEN}✓${NC} Python Development Tools"
-    [ "$INSTALL_GIT" == true ] && echo -e "${GREEN}✓${NC} Git Version Control"
-    [ "$INSTALL_GITHUB_CLI" == true ] && echo -e "${GREEN}✓${NC} GitHub CLI"
-    [ "$SETUP_PODMAN_DOCKER" == true ] && echo -e "${GREEN}✓${NC} Docker/Podman Mapping"
+    local selected_count=0
+    [ "$INSTALL_NODEJS" == true ] && { echo -e "${GREEN}✓${NC} Node.js Development Stack"; ((selected_count++)); }
+    [ "$INSTALL_PYTHON" == true ] && { echo -e "${GREEN}✓${NC} Python Development Tools"; ((selected_count++)); }
+    [ "$INSTALL_GIT" == true ] && { echo -e "${GREEN}✓${NC} Git Version Control"; ((selected_count++)); }
+    [ "$INSTALL_GITHUB_CLI" == true ] && { echo -e "${GREEN}✓${NC} GitHub CLI"; ((selected_count++)); }
+    [ "$SETUP_PODMAN_DOCKER" == true ] && { echo -e "${GREEN}✓${NC} Docker/Podman Mapping"; ((selected_count++)); }
+
+    # Warn if nothing selected
+    if [ $selected_count -eq 0 ]; then
+        echo -e "${RED}✗ No tools selected${NC}"
+        echo ""
+        echo -e "${YELLOW}You haven't selected any tools to install.${NC}"
+        echo "The container will be created but will be empty."
+        echo ""
+        echo -en "Continue anyway? (y/N): "
+        read -r response
+        case $response in
+            [Yy]* )
+                log "User chose to continue with no tools"
+                ;;
+            * )
+                echo -e "\n${YELLOW}Installation cancelled. Please run again and select tools.${NC}"
+                exit 0
+                ;;
+        esac
+    fi
 
     echo ""
     separator
@@ -385,6 +406,44 @@ main() {
     echo -e "${YELLOW}Press Enter to continue...${NC}"
     read -r
 
+    # Check host system requirements first
+    check_host_system || {
+        log_error "Host system requirements not met"
+        echo -e "\n${RED}Setup cancelled. Please fix the issues above.${NC}"
+        exit 1
+    }
+
+    # Check if user might want Bazzite DX (only if on base Bazzite)
+    if [ -f /etc/os-release ] && grep -qi "bazzite" /etc/os-release; then
+        if ! rpm-ostree status 2>/dev/null | grep -qi "dx"; then
+            echo ""
+            separator
+            echo -e "${YELLOW}${BOLD}💡 Note: Bazzite DX Detected${NC}"
+            echo ""
+            echo "You are running base Bazzite. Bazzite DX includes additional"
+            echo "developer tools and is recommended for development."
+            echo ""
+            echo "v3.0 does not include the DX rebase feature yet."
+            echo -e "To rebase to DX, run: ${CYAN}./setup-dev-container.sh${NC} (v2.0) first,"
+            echo "or manually rebase using rpm-ostree."
+            echo ""
+            echo -en "Continue with v3.0 setup anyway? (Y/n): "
+            read -r response
+            case $response in
+                [Nn]* )
+                    echo ""
+                    echo "Setup cancelled. Run ./setup-dev-container.sh for DX rebase."
+                    exit 0
+                    ;;
+                * )
+                    log "User chose to continue without DX rebase"
+                    ;;
+            esac
+            separator
+            echo ""
+        fi
+    fi
+
     # Show selection menu
     show_tool_selection_menu
 
@@ -403,6 +462,10 @@ main() {
 
     # Install all selected tools
     install_all_tools
+
+    # Wait for installations to fully settle (avoid race conditions)
+    log "Waiting for installations to settle..."
+    sleep 3
 
     # Export binaries to host
     export_all_tools
