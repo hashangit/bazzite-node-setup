@@ -17,7 +17,7 @@
 # Usage: ./setup.sh
 #
 # IMPORTANT: This script has been thoroughly tested and reviewed.
-# See QA_REVIEW.md for known limitations and issues.
+# See QA_REVIEW_V3.md and COMPLETION_SUMMARY.md for status and details.
 ################################################################################
 
 set -uo pipefail  # Continue on errors to report them
@@ -347,7 +347,7 @@ EOF
 - Use \`distrobox enter main-dev\` for direct container access
 
 ### Known Limitations
-See QA_REVIEW.md for complete list of known issues and limitations.
+See QA_REVIEW_V3.md and COMPLETION_SUMMARY.md for complete status.
 
 ---
 
@@ -519,7 +519,8 @@ main() {
     echo -e "\n${GREEN}${BOLD}Setup Completed in ${minutes}m ${seconds}s${NC}\n"
     echo -e "📄 Report: ${CYAN}$REPORT_FILE${NC}"
     echo -e "📋 Log: ${CYAN}$LOG_FILE${NC}"
-    echo -e "📖 QA Review: ${CYAN}$SCRIPT_DIR/QA_REVIEW.md${NC}"
+    echo -e "📖 QA Review: ${CYAN}$SCRIPT_DIR/QA_REVIEW_V3.md${NC}"
+    echo -e "📊 Completion Status: ${CYAN}$SCRIPT_DIR/COMPLETION_SUMMARY.md${NC}"
     echo ""
     echo -e "${YELLOW}Next:${NC} Restart terminal, then run ./verify-setup.sh"
     echo ""
