@@ -1,20 +1,38 @@
 # Bazzite Node.js Development Container Setup
 
-A production-ready, automated setup for Node.js development on Bazzite using distrobox. This creates a clean, isolated development environment with all Node.js tools properly exported to your host system.
+A production-ready, **fully interactive** setup for Node.js development on Bazzite using distrobox. This creates a clean, isolated development environment with all development tools properly exported to your host system.
 
 ## Features
 
-✅ **Complete Node.js Development Stack**
-- Node.js (LTS version via NVM)
-- npm & npx (package managers)
-- pnpm (fast, disk-efficient package manager)
-- bun (blazing fast all-in-one JavaScript runtime)
-- NVM (Node Version Manager)
+✅ **Interactive Setup with Smart Detection**
+- Automatically detects Bazzite variant (base vs DX)
+- Detects desktop environment (KDE vs GNOME)
+- Detects GPU vendor (NVIDIA, AMD, Intel)
+- Offers to rebase to Bazzite DX if needed
+- Choose which tools to install
+
+✅ **Complete Development Stack**
+- **Node.js**: LTS version via NVM, npm, npx, pnpm, bun
+- **Python**: UV (fast package manager)
+- **Version Control**: git, GitHub CLI (gh)
+- **Containers**: Podman with Docker aliasing
+
+✅ **Bazzite DX Rebase Support**
+- Safe, automatic detection of current variant
+- Proper matching of desktop environment (GNOME→GNOME DX, KDE→KDE DX)
+- GPU-aware rebasing (NVIDIA drivers when needed)
+- Reboot handling with continuation after restart
+
+✅ **Extra Configuration Options**
+- Docker/Podman command mapping
+- Dev folder creation with comprehensive guides
+- Multiple shell support (bash, zsh, fish)
+- Organized project structure
 
 ✅ **Clean Integration**
 - All tools exported to host system
 - No conflicts or duplication
-- Proper PATH management
+- Proper PATH management across all shells
 - Seamless terminal integration
 
 ✅ **Production Ready**
@@ -22,6 +40,7 @@ A production-ready, automated setup for Node.js development on Bazzite using dis
 - Automatic verification
 - Detailed logging
 - Easy uninstall process
+- Recovery suggestions for failures
 
 ✅ **Process Management**
 - Dev servers stop when terminal closes
@@ -49,17 +68,33 @@ cd bazzite-node-setup
 chmod +x setup-dev-container.sh
 ```
 
-3. Run the setup:
+3. Run the interactive setup:
 ```bash
 ./setup-dev-container.sh
 ```
 
-4. Restart your terminal or reload your PATH:
+The script will:
+- Check if you want to rebase to Bazzite DX (if on base version)
+- Let you choose which development tools to install
+- Install everything automatically
+- Generate a detailed report
+
+4. **(Optional)** Configure extras:
+```bash
+./configure-extras.sh
+```
+
+This adds:
+- Docker/Podman command mapping (use `docker` commands with Podman)
+- Dev folder creation (`~/Dev/`) with comprehensive guides
+- Shell configuration for bash, zsh, and fish
+
+5. Restart your terminal or reload your PATH:
 ```bash
 export PATH="$HOME/.local/bin:$PATH"
 ```
 
-5. Verify the installation:
+6. Verify the installation:
 ```bash
 ./verify-setup.sh
 ```
