@@ -48,8 +48,10 @@ You have $NVM_DIR set to "/var/home/hashan/.nvm", but that directory does not ex
 - Install script refuses to proceed (protection mechanism)
 
 **Fix:** Unset NVM_DIR before installation
-- File: `modules/install-tools.sh` (lines 132-134)
-- Added: `unset NVM_DIR` at start of install script
+- File: `modules/install-tools.sh` (lines 132-135)
+- Added: `unset -v NVM_DIR 2>/dev/null || true` at start of install script
+- The `-v` flag explicitly unsets the variable (not function)
+- Error suppression ensures script continues even if variable doesn't exist
 - Allows fresh installation
 
 ### Bug #4: Duplicate Error Handling Code
@@ -118,7 +120,9 @@ Expected Success Rate: 9/9 tools (100%) ✅
 3. **9551e0b** - Add comprehensive bugfix documentation for NVM/Node.js issues
 4. **9ec9b1d** - Refactor: Extract duplicate error handling to DRY helper function
 5. **7cdf75b** - CRITICAL FIX: Unset NVM_DIR to prevent installation failure
-6. **5a8f066** - Merge: Fix all installation failures
+6. **ae20ca6** - Merge: Fix all installation failures (PR #3)
+7. **ba0cb41** - Add final summary of all bugfixes and testing instructions
+8. **4ef01b0** - Improve NVM_DIR unset robustness with -v flag
 
 ---
 
@@ -136,14 +140,19 @@ rm -rf setup.log setup-report.md
 git checkout claude/distrobox-node-setup-guide-011CV2HCsH2fMxcWecH4thYo
 git pull
 
-# 3. Run setup
+# 3. CRITICAL: Verify the fix is in the code
+grep -n "unset -v NVM_DIR" modules/install-tools.sh
+# Should show: line 135: unset -v NVM_DIR 2>/dev/null || true
+# If not found, the fix isn't in your code - pull again!
+
+# 4. Run setup
 ./setup.sh
 
-# 4. Follow interactive prompts
+# 5. Follow interactive prompts
 # - Select which tools to install
 # - Watch for successful installations
 
-# 5. Verify all tools work
+# 6. Verify all tools work
 source ~/.bashrc  # or ~/.zshrc
 node --version    # Should show v20.x.x or v22.x.x
 npm --version     # Should show version
@@ -153,7 +162,7 @@ git --version     # Should show version
 gh --version      # Should show version
 uv --version      # Should show version
 
-# 6. Run verification script
+# 7. Run verification script
 ./verify-setup.sh
 ```
 
