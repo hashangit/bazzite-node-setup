@@ -129,6 +129,10 @@ install_nvm() {
     local install_nvm='
         set -e
 
+        # CRITICAL: Unset NVM_DIR if set (prevents install script from failing)
+        # The host may have NVM_DIR set, which confuses the install script
+        unset NVM_DIR
+
         # Check if NVM already installed
         if [ -d "$HOME/.nvm" ]; then
             echo "NVM already installed"
