@@ -219,19 +219,28 @@ install_nodejs() {
 
         . "$NVM_DIR/nvm.sh"
 
-        # Fix .npmrc conflicts with NVM
+        # Fix .npmrc conflicts with NVM - temporarily rename it
         if [ -f "$HOME/.npmrc" ]; then
-            echo "Backing up .npmrc and removing NVM-incompatible settings..."
-            cp "$HOME/.npmrc" "$HOME/.npmrc.backup"
-            # Remove globalconfig and prefix settings that conflict with NVM
-            sed -i '/^globalconfig=/d' "$HOME/.npmrc"
-            sed -i '/^prefix=/d' "$HOME/.npmrc"
+            echo "Temporarily moving .npmrc to avoid conflicts with NVM..."
+            mv "$HOME/.npmrc" "$HOME/.npmrc.tmp"
         fi
 
-        # Install Node.js LTS
+        # Install Node.js LTS (without .npmrc interference)
         nvm install --lts
 
-        # Use with --delete-prefix to handle any remaining conflicts
+        # Restore .npmrc and fix it
+        if [ -f "$HOME/.npmrc.tmp" ]; then
+            echo "Restoring .npmrc and cleaning incompatible settings..."
+            mv "$HOME/.npmrc.tmp" "$HOME/.npmrc"
+            # Backup original
+            cp "$HOME/.npmrc" "$HOME/.npmrc.backup"
+            # Remove globalconfig and prefix settings
+            sed -i '/^globalconfig=/d' "$HOME/.npmrc"
+            sed -i '/^prefix=/d' "$HOME/.npmrc"
+            echo ".npmrc cleaned (backup saved as .npmrc.backup)"
+        fi
+
+        # Activate Node.js with delete-prefix flag
         nvm use --delete-prefix --lts || nvm use --lts
 
         nvm alias default node
