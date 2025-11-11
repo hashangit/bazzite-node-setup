@@ -135,7 +135,12 @@ install_nvm() {
         sed -i "/NVM_DIR/d" "$HOME/.bashrc" 2>/dev/null || true
         sed -i "/NVM_DIR/d" "$HOME/.zshrc" 2>/dev/null || true
 
-        # Install NVM - let it choose default location (respects XDG if set)
+        # CRITICAL: Unset NVM_DIR from current shell environment
+        # The host shell has this set, and it leaks through to container
+        # Removing from config files isn't enough - must unset in current shell
+        unset NVM_DIR
+
+        # Install NVM - now it won't see the old NVM_DIR variable
         echo "Installing NVM..."
         curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash
 
