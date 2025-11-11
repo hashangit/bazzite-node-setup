@@ -219,37 +219,24 @@ install_nodejs() {
 
         . "$NVM_DIR/nvm.sh"
 
-        echo "=== FIX: Remove .npmrc before NVM install ==="
+        # Simple approach: Let nvm install, then use --delete-prefix to activate
+        # This uses NVM's built-in mechanism to handle .npmrc conflicts
+        echo "Installing Node.js LTS..."
 
-        # The problem: NVM checks .npmrc BEFORE installing Node.js
-        # If .npmrc has prefix/globalconfig, NVM refuses to proceed
-        # Solution: Completely remove .npmrc, let NVM/npm create a clean one
+        # This will download Node.js (may show .npmrc warning but download succeeds)
+        nvm install --lts || true
 
-        if [ -f "$HOME/.npmrc" ]; then
-            echo "Found $HOME/.npmrc, backing up and removing..."
-            cp "$HOME/.npmrc" "$HOME/.npmrc.pre-nvm-backup"
-            rm -f "$HOME/.npmrc"
-            echo ".npmrc removed (backup: ~/.npmrc.pre-nvm-backup)"
-        fi
+        # Now activate with --delete-prefix flag to handle any .npmrc conflicts
+        # This is exactly what the error message tells us to do
+        echo "Activating Node.js with --delete-prefix..."
+        nvm use --delete-prefix --lts
 
-        # Unset environment variables that npm might read
-        unset npm_config_prefix NPM_CONFIG_PREFIX
-        unset npm_config_globalconfig NPM_CONFIG_GLOBALCONFIG
-
-        # Install Node.js LTS in completely clean environment
-        echo "Installing Node.js LTS via NVM..."
-        nvm install --lts
-
-        # Set default and activate
+        # Set as default
         nvm alias default node
-        nvm use default
 
-        # Verify installation
-        echo "=== Verification ==="
+        # Verify
         node --version
         npm --version
-        echo "npm prefix: $(npm config get prefix)"
-        echo "=== Node.js installation complete ==="
     '
 
     if distrobox enter "$CONTAINER_NAME" -- bash -c "$install_node" >> "$LOG_FILE" 2>&1; then
