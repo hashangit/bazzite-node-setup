@@ -411,6 +411,16 @@ VERIFY_EOF
 }
 
 ################################################################################
+# Error Handling
+################################################################################
+
+handle_fatal_error() {
+    log_error "$1"
+    echo -e "\n${RED}Setup failed. Check $LOG_FILE for details.${NC}"
+    exit 1
+}
+
+################################################################################
 # Main Execution
 ################################################################################
 
@@ -433,11 +443,7 @@ main() {
     read -r
 
     # Check host system requirements first
-    check_host_system || {
-        log_error "Host system requirements not met"
-        echo -e "\n${RED}Setup cancelled. Please fix the issues above.${NC}"
-        exit 1
-    }
+    check_host_system || handle_fatal_error "Host system requirements not met"
 
     # Check if user might want Bazzite DX (only if on base Bazzite)
     if [ -f /etc/os-release ] && grep -qi "bazzite" /etc/os-release; then
@@ -480,18 +486,10 @@ main() {
     echo ""
 
     # Setup container
-    setup_container || {
-        log_error "Container setup failed"
-        echo -e "\n${RED}Setup failed. Check $LOG_FILE for details.${NC}"
-        exit 1
-    }
+    setup_container || handle_fatal_error "Container setup failed"
 
     # Install base dependencies in container (CRITICAL - must run before tool installation)
-    install_container_dependencies || {
-        log_error "Failed to install container dependencies"
-        echo -e "\n${RED}Setup failed. Check $LOG_FILE for details.${NC}"
-        exit 1
-    }
+    install_container_dependencies || handle_fatal_error "Failed to install container dependencies"
 
     # Install all selected tools
     install_all_tools
