@@ -190,6 +190,9 @@ configure_all_shells() {
     # Configure aliases if requested
     configure_docker_aliases || true  # Don't fail on alias configuration
 
+    # Add NVM wrapper function for host-side use
+    configure_nvm_wrapper
+
     # Add PATH to current session
     export PATH="$HOME/.local/bin:$PATH"
     log "PATH configured for current session"
@@ -207,6 +210,56 @@ configure_all_shells() {
         log_warn "Some shell configurations had issues"
         return 1
     fi
+}
+
+configure_nvm_wrapper() {
+    if [ "${INSTALL_NODEJS:-true}" != true ]; then
+        return 0
+    fi
+
+    log "Adding NVM wrapper function for host-side use..."
+
+    local nvm_wrapper='
+# NVM wrapper - allows using NVM from host terminal
+nvm() {
+    distrobox-enter -n main-dev -- bash -lc "export NVM_DIR=\"\$HOME/.nvm\"; [ -s \"\$NVM_DIR/nvm.sh\" ] && . \"\$NVM_DIR/nvm.sh\"; nvm $*"
+}
+'
+
+    # Add to bash configs
+    for config in "$HOME/.bashrc" "$HOME/.bash_profile"; do
+        if [ -f "$config" ]; then
+            if ! grep -q "NVM wrapper" "$config" 2>/dev/null; then
+                echo "$nvm_wrapper" >> "$config"
+                log "  Added NVM wrapper to $config"
+            fi
+        fi
+    done
+
+    # Add to zsh config
+    if [ -f "$HOME/.zshrc" ]; then
+        if ! grep -q "NVM wrapper" "$HOME/.zshrc" 2>/dev/null; then
+            echo "$nvm_wrapper" >> "$HOME/.zshrc"
+            log "  Added NVM wrapper to ~/.zshrc"
+        fi
+    fi
+
+    # Add to fish config (different syntax)
+    local fish_config="$HOME/.config/fish/config.fish"
+    if [ -f "$fish_config" ]; then
+        local fish_nvm_wrapper='
+# NVM wrapper for Fish
+function nvm
+    distrobox-enter -n main-dev -- bash -lc "export NVM_DIR=\"\$HOME/.nvm\"; [ -s \"\$NVM_DIR/nvm.sh\" ] && . \"\$NVM_DIR/nvm.sh\"; nvm $argv"
+end
+'
+        if ! grep -q "NVM wrapper" "$fish_config" 2>/dev/null; then
+            echo "$fish_nvm_wrapper" >> "$fish_config"
+            log "  Added NVM wrapper to Fish config"
+        fi
+    fi
+
+    log_success "NVM wrapper configured - you can now use 'nvm' from host terminal"
 }
 
 verify_shell_configuration() {

@@ -43,6 +43,7 @@ export INSTALL_PYTHON=true
 export INSTALL_GIT=true
 export INSTALL_GITHUB_CLI=true
 export SETUP_PODMAN_DOCKER=false
+export CREATE_DEV_FOLDER=false
 
 ################################################################################
 # Import Modules
@@ -55,6 +56,9 @@ source "$MODULES_DIR/configure-shell.sh"
 
 # Import tool installation module
 source "$MODULES_DIR/install-tools.sh"
+
+# Import dev folder creation module
+source "$MODULES_DIR/create-dev-folder.sh"
 
 # Import additional modules if they exist
 [ -f "$MODULES_DIR/detect-bazzite.sh" ] && source "$MODULES_DIR/detect-bazzite.sh"
@@ -191,6 +195,27 @@ show_tool_selection_menu() {
         esac
     done
 
+    # Dev folder creation
+    while true; do
+        echo -e "\n${CYAN}${BOLD}6. Dev Folder with Documentation${NC}"
+        echo "   Creates: ~/Dev with organized structure and guides"
+        echo "   Includes: SETUP_GUIDE, CHEAT_SHEET, QUICK_REF, DOCKER_PODMAN guide"
+        echo -en "\n   Create Dev folder? (Y/n): "
+        read -r response
+        case $response in
+            [Nn]* )
+                CREATE_DEV_FOLDER=false
+                log "User skipped: Dev folder creation"
+                break
+                ;;
+            * )
+                CREATE_DEV_FOLDER=true
+                log "User selected: Dev folder creation"
+                break
+                ;;
+        esac
+    done
+
     # Summary
     print_header
     echo -e "${GREEN}${BOLD}Installation Summary${NC}\n"
@@ -205,6 +230,7 @@ show_tool_selection_menu() {
     [ "$INSTALL_GIT" == true ] && { echo -e "${GREEN}✓${NC} Git Version Control"; ((selected_count++)); }
     [ "$INSTALL_GITHUB_CLI" == true ] && { echo -e "${GREEN}✓${NC} GitHub CLI"; ((selected_count++)); }
     [ "$SETUP_PODMAN_DOCKER" == true ] && { echo -e "${GREEN}✓${NC} Docker/Podman Mapping"; ((selected_count++)); }
+    [ "$CREATE_DEV_FOLDER" == true ] && { echo -e "${GREEN}✓${NC} Dev Folder with Documentation"; ((selected_count++)); }
 
     # Warn if nothing selected
     if [ $selected_count -eq 0 ]; then
@@ -418,7 +444,7 @@ main() {
         if ! rpm-ostree status 2>/dev/null | grep -qi "dx"; then
             echo ""
             separator
-            echo -e "${YELLOW}${BOLD}💡 Note: Bazzite DX Detected${NC}"
+            echo -e "${YELLOW}${BOLD}💡 Note: Base Bazzite Detected (Not DX)${NC}"
             echo ""
             echo "You are running base Bazzite. Bazzite DX includes additional"
             echo "developer tools and is recommended for development."
@@ -472,6 +498,9 @@ main() {
 
     # Configure shells
     configure_all_shells
+
+    # Create Dev folder if requested
+    create_dev_folder_structure
 
     # Verify installation
     verify_installation || log_warn "Some tools may not be accessible yet. Restart terminal and verify."

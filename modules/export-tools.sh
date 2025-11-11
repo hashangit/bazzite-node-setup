@@ -6,7 +6,7 @@
 ################################################################################
 
 # Source common functions
-SCRIPT_DIR="$(cd "$(dirname "$(realpath "${BASH_SOURCE[0]}")")/.." && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$SCRIPT_DIR/modules/common.sh"
 
 # Export a binary with process-aware wrapper
@@ -55,6 +55,13 @@ trap cleanup EXIT TERM INT HUP QUIT
 distrobox-enter -n "CONTAINER_NAME" -- "BINARY_PATH" "$@" &
 CHILD_PID=$!
 
+# Verify process started (wait briefly and check)
+sleep 0.1
+if ! kill -0 $CHILD_PID 2>/dev/null; then
+    echo "Error: Failed to start TOOL_NAME in container" >&2
+    exit 1
+fi
+
 # Wait for the process to complete
 # This blocks but allows traps to work
 wait $CHILD_PID
@@ -66,9 +73,10 @@ exit $EXIT_CODE
 WRAPPER_EOF
 
     # Replace placeholders with actual values
-    sed -i "s|TOOL_NAME|$tool_name|g" "$HOME/.local/bin/$tool_name"
-    sed -i "s|CONTAINER_NAME|$container|g" "$HOME/.local/bin/$tool_name"
-    sed -i "s|BINARY_PATH|$binary_path|g" "$HOME/.local/bin/$tool_name"
+    # Use @ as delimiter to avoid conflicts with paths containing |
+    sed -i "s@TOOL_NAME@$tool_name@g" "$HOME/.local/bin/$tool_name"
+    sed -i "s@CONTAINER_NAME@$container@g" "$HOME/.local/bin/$tool_name"
+    sed -i "s@BINARY_PATH@$binary_path@g" "$HOME/.local/bin/$tool_name"
 
     chmod +x "$HOME/.local/bin/$tool_name"
 
