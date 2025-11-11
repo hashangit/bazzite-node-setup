@@ -219,35 +219,52 @@ install_nodejs() {
 
         . "$NVM_DIR/nvm.sh"
 
-        # Fix .npmrc conflicts with NVM - temporarily rename it
-        if [ -f "$HOME/.npmrc" ]; then
-            echo "Temporarily moving .npmrc to avoid conflicts with NVM..."
-            mv "$HOME/.npmrc" "$HOME/.npmrc.tmp"
+        echo "=== DEFINITIVE FIX for .npmrc conflicts with NVM ==="
+
+        # Step 1: Backup ALL .npmrc files
+        echo "Backing up .npmrc files..."
+        [ -f "$HOME/.npmrc" ] && cp "$HOME/.npmrc" "$HOME/.npmrc.backup.$(date +%s)"
+
+        # Step 2: If npm already exists (from system or previous install),
+        # use it to properly delete conflicting settings from ALL config locations
+        if command -v npm &> /dev/null; then
+            echo "Found existing npm, removing conflicting configs..."
+            npm config delete prefix 2>/dev/null || true
+            npm config delete globalconfig 2>/dev/null || true
+            echo "Conflicting npm configs removed"
         fi
 
-        # Install Node.js LTS (without .npmrc interference)
+        # Step 3: Clean the user .npmrc file manually as well (belt and suspenders)
+        if [ -f "$HOME/.npmrc" ]; then
+            echo "Cleaning $HOME/.npmrc..."
+            # Remove prefix and globalconfig lines
+            sed -i.bak "/^prefix=/d; /^globalconfig=/d" "$HOME/.npmrc"
+            echo "User .npmrc cleaned"
+        fi
+
+        # Step 4: Unset npm environment variables that might interfere
+        unset npm_config_prefix
+        unset NPM_CONFIG_PREFIX
+        unset npm_config_globalconfig
+        unset NPM_CONFIG_GLOBALCONFIG
+
+        # Step 5: Install Node.js LTS in clean environment
+        echo "Installing Node.js LTS via NVM..."
         nvm install --lts
 
-        # Restore .npmrc and fix it
-        if [ -f "$HOME/.npmrc.tmp" ]; then
-            echo "Restoring .npmrc and cleaning incompatible settings..."
-            mv "$HOME/.npmrc.tmp" "$HOME/.npmrc"
-            # Backup original
-            cp "$HOME/.npmrc" "$HOME/.npmrc.backup"
-            # Remove globalconfig and prefix settings
-            sed -i '/^globalconfig=/d' "$HOME/.npmrc"
-            sed -i '/^prefix=/d' "$HOME/.npmrc"
-            echo ".npmrc cleaned (backup saved as .npmrc.backup)"
-        fi
-
-        # Activate Node.js with delete-prefix flag
+        # Step 6: Use with --delete-prefix flag to ensure any remaining prefix is removed
+        echo "Activating Node.js..."
         nvm use --delete-prefix --lts || nvm use --lts
 
+        # Step 7: Set default alias
         nvm alias default node
 
-        # Verify
+        # Verify installation
+        echo "=== Verification ==="
         node --version
         npm --version
+        echo "npm prefix: $(npm config get prefix)"
+        echo "=== Node.js installation complete ==="
     '
 
     if distrobox enter "$CONTAINER_NAME" -- bash -c "$install_node" >> "$LOG_FILE" 2>&1; then
