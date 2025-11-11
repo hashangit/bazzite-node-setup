@@ -214,74 +214,102 @@ Users can choose to install:
 ./test-setup.sh
 ```
 
-## Next Steps for Full Modularization
+## Modularization Complete
 
-To complete the modularization (requested by user), create these additional modules:
+The modularization requested by the user has been completed:
 
-### Planned Modules
+### Completed Modules
 ```
 modules/
-├── common.sh                      # ✅ Completed
-├── detect-bazzite.sh              # TODO: Bazzite detection and rebase
-├── setup-container.sh             # TODO: Container creation
-├── install-nodejs.sh              # TODO: Node.js stack
-├── install-python.sh              # TODO: Python/UV
-├── install-vcs.sh                 # TODO: Git and GitHub CLI
-├── export-tools.sh                # TODO: Binary exports
-└── configure-shell.sh             # TODO: Shell configuration
+├── common.sh                      # ✅ Shared utilities, logging, state tracking
+├── setup-container.sh             # ✅ Container creation with podman socket
+├── install-tools.sh               # ✅ All tool installations (Node.js, Python, Git, etc.)
+├── export-tools.sh                # ✅ Binary exports with process wrappers
+└── configure-shell.sh             # ✅ Multi-shell configuration
 ```
 
-### New Orchestrator
+### Orchestrator Complete
 ```
-setup.sh                           # TODO: Main orchestrator
+setup.sh                           # ✅ Fully functional orchestrator
 ```
-- Sources modules
-- Handles user selections
-- Calls appropriate modules
-- Manages state
-- Generates reports
+- ✅ Sources all modules
+- ✅ Handles interactive user selections
+- ✅ Calls modules based on selections
+- ✅ Manages installation state
+- ✅ Generates comprehensive reports
+- ✅ Creates verification script
+
+### Still TODO (Optional Enhancements)
+```
+modules/
+└── detect-bazzite.sh              # TODO: Extract Bazzite DX rebase to module
+```
+- Currently Bazzite detection is in setup-dev-container.sh (v2.0)
+- Can be extracted to module for v3.0 if needed
 
 ## Current Status
 
-**Version**: 2.0 (Interactive with Bazzite DX support)
+**Versions Available:**
+- **v2.0**: Monolithic, proven workflow (setup-dev-container.sh)
+- **v3.0**: Modular architecture with critical fixes (setup.sh + modules)
 
 **Lines of Code**:
-- Main setup: 1,545 lines
+- v2.0 Main setup: 1,545 lines
+- v3.0 Orchestrator: 454 lines
+- v3.0 Modules: ~850 lines (common, setup-container, install-tools, export-tools, configure-shell)
 - Extra config: 700+ lines
-- Common module: 150+ lines
 - Test suite: 600+ lines
-- Documentation: ~50KB
+- Documentation: ~60KB
 
-**Production Ready**: ✅ Yes
-**All Features Working**: ✅ Yes
-**Fully Tested**: ⚠️  Manual testing required on actual Bazzite system
-**Documentation**: ✅ Complete
+**v3.0 Status:**
+- **Modular Architecture**: ✅ Complete
+- **Critical Fixes Implemented**: ✅ Complete
+  - Process management wrappers
+  - Podman socket mounting
+  - Comprehensive shell configuration
+- **Integration**: ✅ Complete
+- **Tested on Bazzite**: ⚠️  Needs validation
+- **Documentation**: ✅ Accurate and complete
 
 ## Commit History
 
 1. **Initial commit** (87bc564): Base automated setup
 2. **Second commit** (7da53e4): Interactive setup with Bazzite DX rebase and extras
+3. **Third commit** (1eb1aee): Modular architecture foundation and implementation summary
+4. **Upcoming commit**: Complete v3.0 modular architecture with all critical fixes
 
 ## Summary
 
-The Bazzite Node.js Development Container Setup is now a comprehensive, production-ready solution with:
+The Bazzite Node.js Development Container Setup now provides two complete solutions:
 
+### v2.0 - Proven Monolithic (setup-dev-container.sh)
 - ✅ Full interactive experience
-- ✅ Smart Bazzite variant detection
-- ✅ Safe DX rebasing
+- ✅ Smart Bazzite variant detection and DX rebasing
 - ✅ Flexible tool selection
 - ✅ Docker/Podman integration
-- ✅ Organized dev environment
-- ✅ Multi-shell support
-- ✅ Extensive documentation
-- ✅ Comprehensive testing
-- ✅ Error recovery
-- ✅ Modular foundation
+- ✅ Comprehensive documentation
+- ⚠️  Process termination not guaranteed
+- ⚠️  No podman socket access
 
-**Ready for**: Production use, sharing with Bazzite community, further modularization
+### v3.0 - Modular with Fixes (setup.sh + modules)
+- ✅ Complete modular architecture
+- ✅ Process management wrappers (SIGTERM/HUP handling)
+- ✅ Podman socket mounting
+- ✅ Comprehensive multi-shell configuration
+- ✅ Full state tracking and error handling
+- ✅ Progress indicators
+- ✅ Addresses all critical issues from QA review
+- ⚠️  Needs testing on actual Bazzite systems
+
+**Ready for**:
+- v2.0: Immediate use with known limitations
+- v3.0: Testing and validation by early adopters
+- Both: Sharing with Bazzite community for feedback
 
 ---
 
-**Last Updated**: 2024-11-11
+**Last Updated**: 2025-11-11
 **Branch**: `claude/distrobox-node-setup-guide-011CV2HCsH2fMxcWecH4thYo`
-**Status**: ✅ Ready for use and further development
+**Status**:
+- v2.0: ✅ Ready for use with known limitations
+- v3.0: ✅ Implementation complete, testing recommended
