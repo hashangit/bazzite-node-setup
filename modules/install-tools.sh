@@ -131,7 +131,8 @@ install_nvm() {
 
         # CRITICAL: Unset NVM_DIR if set (prevents install script from failing)
         # The host may have NVM_DIR set, which confuses the install script
-        unset NVM_DIR
+        # Using -v flag to explicitly unset the variable (not function)
+        unset -v NVM_DIR 2>/dev/null || true
 
         # Check if NVM already installed
         if [ -d "$HOME/.nvm" ]; then
