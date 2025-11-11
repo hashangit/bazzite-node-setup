@@ -219,35 +219,37 @@ install_nodejs() {
 
         . "$NVM_DIR/nvm.sh"
 
-        # Fix .npmrc conflicts with NVM - temporarily rename it
+        echo "=== FIX: Remove .npmrc before NVM install ==="
+
+        # The problem: NVM checks .npmrc BEFORE installing Node.js
+        # If .npmrc has prefix/globalconfig, NVM refuses to proceed
+        # Solution: Completely remove .npmrc, let NVM/npm create a clean one
+
         if [ -f "$HOME/.npmrc" ]; then
-            echo "Temporarily moving .npmrc to avoid conflicts with NVM..."
-            mv "$HOME/.npmrc" "$HOME/.npmrc.tmp"
+            echo "Found $HOME/.npmrc, backing up and removing..."
+            cp "$HOME/.npmrc" "$HOME/.npmrc.pre-nvm-backup"
+            rm -f "$HOME/.npmrc"
+            echo ".npmrc removed (backup: ~/.npmrc.pre-nvm-backup)"
         fi
 
-        # Install Node.js LTS (without .npmrc interference)
+        # Unset environment variables that npm might read
+        unset npm_config_prefix NPM_CONFIG_PREFIX
+        unset npm_config_globalconfig NPM_CONFIG_GLOBALCONFIG
+
+        # Install Node.js LTS in completely clean environment
+        echo "Installing Node.js LTS via NVM..."
         nvm install --lts
 
-        # Restore .npmrc and fix it
-        if [ -f "$HOME/.npmrc.tmp" ]; then
-            echo "Restoring .npmrc and cleaning incompatible settings..."
-            mv "$HOME/.npmrc.tmp" "$HOME/.npmrc"
-            # Backup original
-            cp "$HOME/.npmrc" "$HOME/.npmrc.backup"
-            # Remove globalconfig and prefix settings
-            sed -i '/^globalconfig=/d' "$HOME/.npmrc"
-            sed -i '/^prefix=/d' "$HOME/.npmrc"
-            echo ".npmrc cleaned (backup saved as .npmrc.backup)"
-        fi
-
-        # Activate Node.js with delete-prefix flag
-        nvm use --delete-prefix --lts || nvm use --lts
-
+        # Set default and activate
         nvm alias default node
+        nvm use default
 
-        # Verify
+        # Verify installation
+        echo "=== Verification ==="
         node --version
         npm --version
+        echo "npm prefix: $(npm config get prefix)"
+        echo "=== Node.js installation complete ==="
     '
 
     if distrobox enter "$CONTAINER_NAME" -- bash -c "$install_node" >> "$LOG_FILE" 2>&1; then
