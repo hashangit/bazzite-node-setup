@@ -136,14 +136,29 @@ install_nvm() {
         fi
 
         # Install NVM
+        echo "Downloading NVM..."
         curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash
 
-        # Load NVM
-        export NVM_DIR="$HOME/.nvm"
-        [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
+        # Wait a moment for installation to complete
+        sleep 2
 
-        # Verify
-        nvm --version
+        # Load NVM (must be in same shell session)
+        export NVM_DIR="$HOME/.nvm"
+        if [ -s "$NVM_DIR/nvm.sh" ]; then
+            . "$NVM_DIR/nvm.sh"
+            echo "NVM loaded successfully"
+        else
+            echo "ERROR: NVM installation script did not create nvm.sh"
+            exit 1
+        fi
+
+        # Verify NVM is available
+        if command -v nvm > /dev/null 2>&1; then
+            nvm --version
+        else
+            echo "ERROR: nvm command not available after sourcing"
+            exit 1
+        fi
     '
 
     if distrobox enter "$CONTAINER_NAME" -- bash -c "$install_nvm" >> "$LOG_FILE" 2>&1; then
@@ -168,6 +183,7 @@ install_nodejs() {
 
     log_step "Installing Node.js..."
 
+    # Use --lts directly instead of variable that won't expand in container
     local install_node='
         set -e
 
@@ -175,10 +191,10 @@ install_nodejs() {
         export NVM_DIR="$HOME/.nvm"
         [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
 
-        # Install Node.js
-        nvm install '$NODE_VERSION'
-        nvm use '$NODE_VERSION'
-        nvm alias default '$NODE_VERSION'
+        # Install Node.js LTS
+        nvm install --lts
+        nvm use --lts
+        nvm alias default node
 
         # Verify
         node --version
