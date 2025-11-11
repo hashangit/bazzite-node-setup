@@ -129,55 +129,56 @@ install_nvm() {
     local install_nvm='
         set -e
 
-        # Remove any existing NVM installations to force fresh install
-        # Check both default (~/.nvm) and XDG config (~/.config/nvm) locations
-        echo "Checking for existing NVM installations..."
-        if [ -d "$HOME/.nvm" ] || [ -d "$HOME/.config/nvm" ]; then
-            echo "Found existing NVM installation, removing for fresh install..."
-            rm -rf "$HOME/.nvm" "$HOME/.config/nvm"
-            # Also remove any NVM entries from shell configs that might set wrong NVM_DIR
-            sed -i '/NVM_DIR/d' "$HOME/.bashrc" 2>/dev/null || true
-            sed -i '/NVM_DIR/d' "$HOME/.zshrc" 2>/dev/null || true
-        fi
+        # Remove any existing NVM installations
+        echo "Cleaning up existing NVM installations..."
+        rm -rf "$HOME/.nvm" "$HOME/.config/nvm"
+        sed -i "/NVM_DIR/d" "$HOME/.bashrc" 2>/dev/null || true
+        sed -i "/NVM_DIR/d" "$HOME/.zshrc" 2>/dev/null || true
 
-        # CRITICAL: Force NVM to install to ~/.nvm (not XDG location)
-        # By setting NVM_DIR before the install script, we override XDG_CONFIG_HOME
-        export NVM_DIR="$HOME/.nvm"
-
-        # Install NVM to our specified location
-        echo "Installing NVM to $NVM_DIR..."
+        # Install NVM - let it choose default location (respects XDG if set)
+        echo "Installing NVM..."
         curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash
 
-        # Wait a moment for installation to complete
         sleep 2
 
-        # Verify NVM installed to correct location
-        if [ ! -s "$NVM_DIR/nvm.sh" ]; then
-            echo "ERROR: NVM installation script did not create nvm.sh at $NVM_DIR"
-            echo "Checking if NVM installed to XDG location instead..."
-            if [ -s "$HOME/.config/nvm/nvm.sh" ]; then
-                echo "ERROR: NVM installed to $HOME/.config/nvm despite NVM_DIR being set"
-            fi
-            exit 1
-        fi
-
-        # Load NVM (must be in same shell session)
-        . "$NVM_DIR/nvm.sh"
-        echo "NVM loaded successfully from $NVM_DIR"
-
-        # Verify NVM is available
-        if command -v nvm > /dev/null 2>&1; then
-            nvm --version
+        # Detect where NVM actually installed
+        if [ -s "$HOME/.nvm/nvm.sh" ]; then
+            NVM_DIR="$HOME/.nvm"
+        elif [ -s "$HOME/.config/nvm/nvm.sh" ]; then
+            NVM_DIR="$HOME/.config/nvm"
         else
-            echo "ERROR: nvm command not available after sourcing"
+            echo "ERROR: NVM did not install to ~/.nvm or ~/.config/nvm"
             exit 1
         fi
+
+        echo "NVM installed to: $NVM_DIR"
+        export NVM_DIR
+
+        # Load NVM from detected location
+        . "$NVM_DIR/nvm.sh"
+
+        # Verify NVM works
+        if ! command -v nvm > /dev/null 2>&1; then
+            echo "ERROR: nvm command not available"
+            exit 1
+        fi
+
+        nvm --version
     '
 
     # Run NVM installation in container
     if distrobox enter "$CONTAINER_NAME" -- bash -c "$install_nvm" >> "$LOG_FILE" 2>&1; then
         local nvm_version
-        nvm_version=$(distrobox enter "$CONTAINER_NAME" -- bash -lc 'export NVM_DIR="$HOME/.nvm"; [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"; nvm --version' 2>&1 || echo "unknown")
+        # Detect NVM location and get version
+        nvm_version=$(distrobox enter "$CONTAINER_NAME" -- bash -c '
+            if [ -s "$HOME/.nvm/nvm.sh" ]; then
+                export NVM_DIR="$HOME/.nvm"
+            elif [ -s "$HOME/.config/nvm/nvm.sh" ]; then
+                export NVM_DIR="$HOME/.config/nvm"
+            fi
+            [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
+            nvm --version
+        ' 2>&1 || echo "unknown")
         log_success "NVM version $nvm_version installed"
         record_tool_status "nvm" "success" "$nvm_version"
         return 0
@@ -201,9 +202,17 @@ install_nodejs() {
     local install_node='
         set -e
 
-        # Load NVM
-        export NVM_DIR="$HOME/.nvm"
-        [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
+        # Detect and load NVM
+        if [ -s "$HOME/.nvm/nvm.sh" ]; then
+            export NVM_DIR="$HOME/.nvm"
+        elif [ -s "$HOME/.config/nvm/nvm.sh" ]; then
+            export NVM_DIR="$HOME/.config/nvm"
+        else
+            echo "ERROR: NVM not found"
+            exit 1
+        fi
+
+        . "$NVM_DIR/nvm.sh"
 
         # Install Node.js LTS
         nvm install --lts
@@ -217,8 +226,25 @@ install_nodejs() {
 
     if distrobox enter "$CONTAINER_NAME" -- bash -c "$install_node" >> "$LOG_FILE" 2>&1; then
         local node_version npm_version
-        node_version=$(distrobox enter "$CONTAINER_NAME" -- bash -lc 'export NVM_DIR="$HOME/.nvm"; [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"; node --version' 2>&1 || echo "unknown")
-        npm_version=$(distrobox enter "$CONTAINER_NAME" -- bash -lc 'export NVM_DIR="$HOME/.nvm"; [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"; npm --version' 2>&1 || echo "unknown")
+        # Detect NVM location and get versions
+        node_version=$(distrobox enter "$CONTAINER_NAME" -- bash -c '
+            if [ -s "$HOME/.nvm/nvm.sh" ]; then
+                export NVM_DIR="$HOME/.nvm"
+            elif [ -s "$HOME/.config/nvm/nvm.sh" ]; then
+                export NVM_DIR="$HOME/.config/nvm"
+            fi
+            [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
+            node --version
+        ' 2>&1 || echo "unknown")
+        npm_version=$(distrobox enter "$CONTAINER_NAME" -- bash -c '
+            if [ -s "$HOME/.nvm/nvm.sh" ]; then
+                export NVM_DIR="$HOME/.nvm"
+            elif [ -s "$HOME/.config/nvm/nvm.sh" ]; then
+                export NVM_DIR="$HOME/.config/nvm"
+            fi
+            [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
+            npm --version
+        ' 2>&1 || echo "unknown")
 
         log_success "Node.js $node_version installed"
         log_success "npm $npm_version installed"
@@ -248,9 +274,17 @@ install_pnpm() {
     local install_pnpm='
         set -e
 
-        # Load NVM
-        export NVM_DIR="$HOME/.nvm"
-        [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
+        # Detect and load NVM
+        if [ -s "$HOME/.nvm/nvm.sh" ]; then
+            export NVM_DIR="$HOME/.nvm"
+        elif [ -s "$HOME/.config/nvm/nvm.sh" ]; then
+            export NVM_DIR="$HOME/.config/nvm"
+        else
+            echo "ERROR: NVM not found"
+            exit 1
+        fi
+
+        . "$NVM_DIR/nvm.sh"
 
         # Check if already installed
         if command -v pnpm &> /dev/null; then
@@ -268,7 +302,15 @@ install_pnpm() {
 
     if distrobox enter "$CONTAINER_NAME" -- bash -c "$install_pnpm" >> "$LOG_FILE" 2>&1; then
         local pnpm_version
-        pnpm_version=$(distrobox enter "$CONTAINER_NAME" -- bash -lc 'export NVM_DIR="$HOME/.nvm"; [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"; pnpm --version' 2>&1 || echo "unknown")
+        pnpm_version=$(distrobox enter "$CONTAINER_NAME" -- bash -c '
+            if [ -s "$HOME/.nvm/nvm.sh" ]; then
+                export NVM_DIR="$HOME/.nvm"
+            elif [ -s "$HOME/.config/nvm/nvm.sh" ]; then
+                export NVM_DIR="$HOME/.config/nvm"
+            fi
+            [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
+            pnpm --version
+        ' 2>&1 || echo "unknown")
         log_success "pnpm $pnpm_version installed"
         record_tool_status "pnpm" "success" "$pnpm_version"
         return 0
