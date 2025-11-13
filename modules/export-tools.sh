@@ -115,13 +115,17 @@ export_nodejs_tools() {
     local exported=0
     local failed=0
 
-    # Get Node.js binary paths (installed via NodeSource at /usr/bin)
+    # Get Node.js binary paths
+    # node, npm, npx: installed via NodeSource at /usr/bin
+    # pnpm: may be in ~/.local/bin (Corepack) or ~/.local/share/pnpm (standalone)
     local node_path npm_path npx_path pnpm_path
 
     node_path=$(distrobox enter "$CONTAINER_NAME" -- which node 2>/dev/null | tr -d '\r\n' | xargs)
     npm_path=$(distrobox enter "$CONTAINER_NAME" -- which npm 2>/dev/null | tr -d '\r\n' | xargs)
     npx_path=$(distrobox enter "$CONTAINER_NAME" -- which npx 2>/dev/null | tr -d '\r\n' | xargs)
-    pnpm_path=$(distrobox enter "$CONTAINER_NAME" -- which pnpm 2>/dev/null | tr -d '\r\n' | xargs)
+
+    # Use login shell for pnpm to ensure PATH includes ~/.local/bin and ~/.local/share/pnpm
+    pnpm_path=$(distrobox enter "$CONTAINER_NAME" -- bash -lc "which pnpm" 2>/dev/null | tr -d '\r\n' | xargs)
 
     # Validate and export node with process management
     if [ -n "$node_path" ] && [[ "$node_path" =~ ^/ ]]; then

@@ -181,25 +181,44 @@ install_pnpm() {
             exit 0
         fi
 
-        # Use Corepack (built into Node.js) to enable pnpm
-        # Corepack needs sudo to create symlinks in /usr/bin
-        echo "Enabling pnpm via Corepack..."
-        sudo corepack enable
+        # Ensure ~/.local/bin exists
+        mkdir -p "$HOME/.local/bin"
 
-        # Verify pnpm is now available
+        # PRIMARY METHOD: Corepack with user directory (NO SUDO NEEDED!)
+        # This avoids permission issues by installing to user directory
+        echo "Enabling pnpm via Corepack (user directory)..."
+        if corepack enable --install-directory "$HOME/.local/bin" 2>/dev/null; then
+            # Add to PATH for this session
+            export PATH="$HOME/.local/bin:$PATH"
+
+            # Verify installation
+            if pnpm --version 2>/dev/null; then
+                echo "✓ pnpm installed via Corepack"
+                pnpm --version
+                exit 0
+            fi
+        fi
+
+        # FALLBACK: Standalone installer if Corepack fails
+        echo "Corepack method failed, using standalone installer..."
+        curl -fsSL https://get.pnpm.io/install.sh | sh -
+
+        # Reload PATH and verify
+        export PNPM_HOME="$HOME/.local/share/pnpm"
+        export PATH="$PNPM_HOME:$PATH"
         pnpm --version
     '
 
     if distrobox enter "$CONTAINER_NAME" -- bash -c "$install_pnpm" >> "$LOG_FILE" 2>&1; then
         local pnpm_version
-        pnpm_version=$(distrobox enter "$CONTAINER_NAME" -- pnpm --version 2>&1 || echo "unknown")
+        pnpm_version=$(distrobox enter "$CONTAINER_NAME" -- bash -lc "pnpm --version" 2>&1 || echo "unknown")
         log_success "pnpm $pnpm_version installed"
         record_tool_status "pnpm" "success" "$pnpm_version"
         return 0
     else
         log_error "Failed to install pnpm"
         record_tool_status "pnpm" "failed" "N/A" "Installation failed"
-        RECOVERY_ACTIONS["pnpm"]="Install manually: npm install -g pnpm"
+        RECOVERY_ACTIONS["pnpm"]="Install manually: curl -fsSL https://get.pnpm.io/install.sh | sh -"
         return 1
     fi
 }
