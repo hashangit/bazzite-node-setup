@@ -301,7 +301,7 @@ EOF
     done
 
     # Check for failed tools (safe with set -u)
-    if [ "${#FAILED_TOOLS[@]:-0}" -gt 0 ]; then
+    if [ -n "${FAILED_TOOLS+x}" ] && [ "${#FAILED_TOOLS[@]}" -gt 0 ]; then
         echo "" >> "$REPORT_FILE"
         echo "### Failed Tools" >> "$REPORT_FILE"
         echo "" >> "$REPORT_FILE"
@@ -367,22 +367,45 @@ set -euo pipefail
 
 GREEN='\033[0;32m'
 RED='\033[0;31m'
+YELLOW='\033[0;33m'
 NC='\033[0m'
 
 PASSED=0
 FAILED=0
+CONTAINER_NAME="main-dev"
 
 check_tool() {
     local tool=$1
-    if command -v "$tool" &> /dev/null; then
-        local version=$($tool --version 2>&1 | head -1)
+
+    # Check if wrapper exists on host
+    if ! command -v "$tool" &> /dev/null; then
+        echo -e "${RED}✗${NC} $tool: NOT FOUND"
+        ((FAILED++))
+        return 1
+    fi
+
+    # Try to get version from wrapper (with timeout to avoid hangs)
+    local version
+    version=$(timeout 5 "$tool" --version 2>&1 | head -1 2>/dev/null || echo "")
+
+    if [ -n "$version" ]; then
         echo -e "${GREEN}✓${NC} $tool: $version"
         ((PASSED++))
         return 0
     else
-        echo -e "${RED}✗${NC} $tool: NOT FOUND"
-        ((FAILED++))
-        return 1
+        # If wrapper times out, check directly in container
+        echo -e "${YELLOW}⚠${NC} $tool: wrapper exists but version check timed out"
+        echo "   Testing directly in container..."
+        if distrobox enter "$CONTAINER_NAME" -- which "$tool" &>/dev/null; then
+            version=$(distrobox enter "$CONTAINER_NAME" -- bash -lc "$tool --version 2>&1 | head -1" 2>/dev/null || echo "")
+            echo -e "${GREEN}✓${NC} $tool: available in container ($version)"
+            ((PASSED++))
+            return 0
+        else
+            echo -e "${RED}✗${NC} $tool: not found in container"
+            ((FAILED++))
+            return 1
+        fi
     fi
 }
 
@@ -403,6 +426,15 @@ echo "===================================="
 
 echo "===================================="
 echo -e "Results: ${GREEN}$PASSED passed${NC}, ${RED}$FAILED failed${NC}"
+
+if [ $FAILED -gt 0 ]; then
+    echo ""
+    echo -e "${YELLOW}Troubleshooting tips:${NC}"
+    echo "1. Restart your terminal to refresh PATH"
+    echo "2. Ensure distrobox is installed and accessible"
+    echo "3. Check container is running: distrobox list"
+    echo "4. Enter container directly: distrobox enter $CONTAINER_NAME"
+fi
 
 [ $FAILED -eq 0 ] && exit 0 || exit 1
 VERIFY_EOF
