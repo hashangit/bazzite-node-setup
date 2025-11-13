@@ -41,6 +41,31 @@ export_binary_with_wrapper() {
 # Auto-generated wrapper for TOOL_NAME
 # Ensures process termination when terminal closes
 
+# CRITICAL: Check if we're already inside the target container
+# This prevents recursive container entry and allows wrappers to work inside containers
+if [ -n "$CONTAINER_ID" ] && [ "$CONTAINER_ID" = "CONTAINER_NAME" ]; then
+    # Already inside target container - exec the native binary directly
+    exec "BINARY_PATH" "$@"
+fi
+
+# Check if distrobox is available
+DISTROBOX_CMD=""
+if [ -x "DISTROBOX_PATH" ]; then
+    DISTROBOX_CMD="DISTROBOX_PATH"
+elif command -v distrobox &>/dev/null; then
+    DISTROBOX_CMD="distrobox"
+elif [ -x "/usr/bin/distrobox" ]; then
+    DISTROBOX_CMD="/usr/bin/distrobox"
+elif [ -x "/usr/local/bin/distrobox" ]; then
+    DISTROBOX_CMD="/usr/local/bin/distrobox"
+elif [ -x "/home/linuxbrew/.linuxbrew/bin/distrobox" ]; then
+    DISTROBOX_CMD="/home/linuxbrew/.linuxbrew/bin/distrobox"
+else
+    echo "Error: distrobox command not found" >&2
+    echo "Please ensure distrobox is installed and in your PATH" >&2
+    exit 127
+fi
+
 # Create a process group so we can kill all children
 set -m
 
@@ -65,7 +90,7 @@ trap cleanup EXIT TERM INT HUP QUIT
 
 # Run command in container as background process (NOT exec!)
 # This preserves the wrapper shell and its trap handlers
-"DISTROBOX_PATH" enter -n "CONTAINER_NAME" -- "BINARY_PATH" "$@" &
+"$DISTROBOX_CMD" enter -n "CONTAINER_NAME" -- "BINARY_PATH" "$@" &
 CHILD_PID=$!
 
 # Verify process started (wait briefly and check)

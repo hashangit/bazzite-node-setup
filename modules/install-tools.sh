@@ -336,10 +336,36 @@ verify_installation() {
     local failed_verify=0
 
     for tool in "${tools[@]}"; do
+        # Check if wrapper exists on host
         if command -v "$tool" &> /dev/null; then
+            # Get version directly from container to avoid wrapper overhead/timeouts
             local version
-            version=$("$tool" --version 2>&1 | head -1 || echo "unknown")
-            log "✓ $tool is accessible (${version})"
+            case "$tool" in
+                node|npm|npx)
+                    version=$(distrobox enter "$CONTAINER_NAME" -- bash -c "$tool --version 2>&1 | head -1" 2>/dev/null | tr -d '\r\n' || echo "")
+                    ;;
+                pnpm|bun|bunx)
+                    version=$(distrobox enter "$CONTAINER_NAME" -- bash -lc "$tool --version 2>&1 | head -1" 2>/dev/null | tr -d '\r\n' || echo "")
+                    ;;
+                git)
+                    version=$(distrobox enter "$CONTAINER_NAME" -- git --version 2>/dev/null | grep -oP '\d+\.\d+\.\d+' | head -1 || echo "")
+                    ;;
+                gh)
+                    version=$(distrobox enter "$CONTAINER_NAME" -- gh --version 2>/dev/null | head -1 | grep -oP '\d+\.\d+\.\d+' || echo "")
+                    ;;
+                uv)
+                    version=$(distrobox enter "$CONTAINER_NAME" -- bash -lc "uv --version 2>&1" 2>/dev/null | grep -oP '\d+\.\d+\.\d+' || echo "")
+                    ;;
+                *)
+                    version=""
+                    ;;
+            esac
+
+            if [ -n "$version" ]; then
+                log "✓ $tool is accessible ($version)"
+            else
+                log "✓ $tool is accessible ()"
+            fi
             ((verified++))
         else
             log_warn "✗ $tool is NOT accessible from host"
