@@ -300,7 +300,8 @@ EOF
         echo "- ✅ **$tool**: ${TOOL_VERSION[$tool]}" >> "$REPORT_FILE"
     done
 
-    if [ ${#FAILED_TOOLS[@]} -gt 0 ]; then
+    # Check for failed tools (safe with set -u)
+    if [ "${#FAILED_TOOLS[@]:-0}" -gt 0 ]; then
         echo "" >> "$REPORT_FILE"
         echo "### Failed Tools" >> "$REPORT_FILE"
         echo "" >> "$REPORT_FILE"

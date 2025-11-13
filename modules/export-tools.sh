@@ -18,6 +18,19 @@ export_binary_with_wrapper() {
 
     log "Exporting $tool_name with process management..."
 
+    # Detect distrobox location on host system
+    local distrobox_path
+    if command -v distrobox &>/dev/null; then
+        distrobox_path=$(command -v distrobox)
+    elif [ -x "/usr/bin/distrobox" ]; then
+        distrobox_path="/usr/bin/distrobox"
+    elif [ -x "/usr/local/bin/distrobox" ]; then
+        distrobox_path="/usr/local/bin/distrobox"
+    else
+        log_error "distrobox command not found in PATH or standard locations"
+        return 1
+    fi
+
     # Remove existing export if present
     rm -f "$HOME/.local/bin/$tool_name" 2>/dev/null
 
@@ -52,7 +65,7 @@ trap cleanup EXIT TERM INT HUP QUIT
 
 # Run command in container as background process (NOT exec!)
 # This preserves the wrapper shell and its trap handlers
-distrobox enter -n "CONTAINER_NAME" -- "BINARY_PATH" "$@" &
+"DISTROBOX_PATH" enter -n "CONTAINER_NAME" -- "BINARY_PATH" "$@" &
 CHILD_PID=$!
 
 # Verify process started (wait briefly and check)
@@ -77,6 +90,7 @@ WRAPPER_EOF
     sed -i "s@TOOL_NAME@$tool_name@g" "$HOME/.local/bin/$tool_name"
     sed -i "s@CONTAINER_NAME@$container@g" "$HOME/.local/bin/$tool_name"
     sed -i "s@BINARY_PATH@$binary_path@g" "$HOME/.local/bin/$tool_name"
+    sed -i "s@DISTROBOX_PATH@$distrobox_path@g" "$HOME/.local/bin/$tool_name"
 
     chmod +x "$HOME/.local/bin/$tool_name"
 
