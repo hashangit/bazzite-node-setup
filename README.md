@@ -35,44 +35,78 @@ git --version
 exit
 ```
 
+## Setup Options
+
+When you run `./setup.sh`, you can choose:
+
+**1. Update/Fix Existing Setup (Default)**
+- Keeps your container and tools
+- Updates wrappers with latest fixes
+- Safe, no data loss
+- Use this to fix issues
+
+**2. Clean Install**
+- Removes existing container
+- Deletes all wrapper scripts
+- Fresh installation from scratch
+- Use this if things are seriously broken
+
 ## If Something Goes Wrong
 
 ```bash
-# Just run setup again - it's idempotent
+# Update/fix existing setup
 ./setup.sh
+# Choose option 1 (default)
 
-# Or get detailed diagnostics
+# Or do a clean install
+./setup.sh
+# Choose option 2, confirm with "yes"
+
+# Get detailed diagnostics
 ./diagnose.sh
 ```
 
-## Files You Need to Care About
+## Files in This Repo
 
-- **setup.sh** - The only script you run
+**Scripts:**
+- **setup.sh** - Main setup script (the only one you need to run)
+- **diagnose.sh** - Optional diagnostic tool for troubleshooting
 - **verify-setup.sh** - Generated after setup, tests everything works
 
-## Files You Don't Need to Care About
+**Documentation:**
+- **README.md** - This file
+- **TROUBLESHOOTING.md** - Help when things go wrong
+- **FIXES_CONTAINER_ERRORS.md** - Technical details of fixes
+- **CONTRIBUTING.md** - For contributors
 
-- `diagnose.sh` - Optional diagnostic tool
-- `regenerate-wrappers.sh` - Legacy, not needed (setup.sh does this)
-- `TROUBLESHOOTING.md` - Only if you have issues
-- `QUICK_FIX.md` - Legacy documentation
-- Everything else - Just documentation
+**Directories:**
+- **modules/** - Internal modules (don't touch)
+- **archive/** - Old docs and scripts (reference only)
 
 ## Common Issues
 
 ### Tools don't work after setup
 
-Solution: Restart your terminal
+**Solution:** Restart your terminal
 ```bash
-# New terminal window, then test
+# Close terminal, open new one, then test
 node -v
 ```
 
-### Want to re-run setup
+### Need to fix wrapper issues
 
-No problem, it's safe to run multiple times:
+**Solution:** Re-run setup in update mode (safe, keeps your data)
 ```bash
 ./setup.sh
+# Choose option 1 (default)
+```
+
+### Everything is broken, want fresh start
+
+**Solution:** Re-run setup in clean install mode
+```bash
+./setup.sh
+# Choose option 2, type "yes" to confirm
 ```
 
 ## What Gets Installed

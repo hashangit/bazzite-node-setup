@@ -74,6 +74,64 @@ source "$MODULES_DIR/create-dev-folder.sh"
 [ -f "$MODULES_DIR/detect-bazzite.sh" ] && source "$MODULES_DIR/detect-bazzite.sh"
 
 ################################################################################
+# Cleanup Functions
+################################################################################
+
+cleanup_existing_setup() {
+    log_step "Cleaning up existing setup..."
+
+    # Remove container
+    if distrobox list 2>/dev/null | grep -q "main-dev"; then
+        log "Removing existing container 'main-dev'..."
+        if distrobox rm -f main-dev &>> "$LOG_FILE"; then
+            log_success "Container removed"
+        else
+            log_warn "Failed to remove container (may not exist)"
+        fi
+    else
+        log "No existing container to remove"
+    fi
+
+    # Remove wrappers
+    log "Removing wrapper scripts from ~/.local/bin..."
+    local removed=0
+    for tool in node npm npx pnpm bun bunx git gh uv; do
+        if [ -f "$HOME/.local/bin/$tool" ]; then
+            rm -f "$HOME/.local/bin/$tool" && ((removed++))
+        fi
+    done
+    log_success "Removed $removed wrapper scripts"
+
+    # Ask about shell configuration
+    echo ""
+    echo -e "${YELLOW}Remove shell configuration?${NC}"
+    echo "This will remove PATH additions from .bashrc, .zshrc, etc."
+    echo -en "Remove shell config? (y/N): "
+    read -r response
+    case $response in
+        [Yy]* )
+            log "Removing shell configuration..."
+            # Remove our additions from shell configs
+            for file in "$HOME/.bashrc" "$HOME/.bash_profile" "$HOME/.profile" \
+                        "$HOME/.zshrc" "$HOME/.zprofile" "$HOME/.zshenv" \
+                        "$HOME/.config/fish/config.fish"; do
+                if [ -f "$file" ]; then
+                    # Remove our marker sections
+                    sed -i '/# >>> bazzite-dev-setup >>>/,/# <<< bazzite-dev-setup <<</d' "$file" 2>/dev/null || true
+                fi
+            done
+            log_success "Shell configuration removed"
+            ;;
+        * )
+            log "Keeping shell configuration"
+            ;;
+    esac
+
+    log_success "Cleanup complete - ready for fresh installation"
+    echo ""
+}
+
+################################################################################
 # UI Functions
 ################################################################################
 
@@ -91,6 +149,63 @@ print_header() {
     echo -e "${NC}"
     separator
     echo ""
+}
+
+show_setup_mode_menu() {
+    print_header
+    echo -e "${YELLOW}${BOLD}Setup Mode${NC}\n"
+    separator
+    echo ""
+    echo "Choose how to proceed:"
+    echo ""
+    echo -e "${CYAN}1. Update/Fix Existing Setup (Default)${NC}"
+    echo "   - Keeps existing container and tools"
+    echo "   - Updates wrappers with latest fixes"
+    echo "   - Safe, no data loss"
+    echo "   - Use this to fix issues"
+    echo ""
+    echo -e "${CYAN}2. Clean Install${NC}"
+    echo "   - Removes existing container"
+    echo "   - Removes all wrapper scripts"
+    echo "   - Fresh installation from scratch"
+    echo "   - Use this if things are seriously broken"
+    echo ""
+    separator
+    echo ""
+    echo -en "${YELLOW}Select mode (1 or 2, default=1):${NC} "
+    read -r mode_choice
+
+    case $mode_choice in
+        2)
+            echo ""
+            echo -e "${YELLOW}${BOLD}⚠️  WARNING: Clean Install${NC}"
+            echo "This will:"
+            echo "  - Remove the 'main-dev' container"
+            echo "  - Delete all wrapper scripts"
+            echo "  - Optionally remove shell configuration"
+            echo ""
+            echo -en "${RED}Are you sure? (yes/N):${NC} "
+            read -r confirm
+            if [[ "$confirm" =~ ^[Yy][Ee][Ss]$ ]]; then
+                log "User selected: Clean install"
+                cleanup_existing_setup
+                return 0
+            else
+                echo -e "\n${YELLOW}Cancelled. Switching to update mode.${NC}"
+                log "User cancelled clean install, switching to update mode"
+                sleep 2
+                return 0
+            fi
+            ;;
+        *)
+            log "User selected: Update/fix existing setup"
+            echo ""
+            echo -e "${GREEN}Proceeding with update/fix mode${NC}"
+            echo "Existing setup will be preserved and updated."
+            sleep 1
+            return 0
+            ;;
+    esac
 }
 
 show_tool_selection_menu() {
@@ -487,6 +602,9 @@ main() {
 
     # Check host system requirements first
     check_host_system || handle_fatal_error "Host system requirements not met"
+
+    # Ask about setup mode (update or clean install)
+    show_setup_mode_menu
 
     # Check if user might want Bazzite DX (only if on base Bazzite)
     if [ -f /etc/os-release ] && grep -qi "bazzite" /etc/os-release; then
