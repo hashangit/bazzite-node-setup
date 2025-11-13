@@ -49,7 +49,17 @@ export CREATE_DEV_FOLDER=false
 # Import Modules
 ################################################################################
 
-# Import all module functions
+# CRITICAL: Unset functions to force fresh reload (prevents bash caching issues)
+unset -f export_binary_with_wrapper export_with_distrobox 2>/dev/null || true
+unset -f export_nodejs_tools export_git_tools export_github_cli export_python_tools 2>/dev/null || true
+unset -f export_all_tools 2>/dev/null || true
+unset -f setup_container install_container_dependencies 2>/dev/null || true
+unset -f configure_all_shells 2>/dev/null || true
+unset -f install_nodejs install_pnpm install_bun install_git install_github_cli install_uv 2>/dev/null || true
+unset -f install_all_tools verify_installation 2>/dev/null || true
+unset -f create_dev_folder_structure 2>/dev/null || true
+
+# Import all module functions (now guaranteed fresh)
 source "$MODULES_DIR/setup-container.sh"
 source "$MODULES_DIR/export-tools.sh"
 source "$MODULES_DIR/configure-shell.sh"
