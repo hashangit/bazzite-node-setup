@@ -1,118 +1,208 @@
-# Troubleshooting: Tools Not Working on Host
+# Troubleshooting Guide
 
-## Issue
-You ran `node -v` on the host and it returns no output (fails silently).
+## The Simple Answer
 
-## Root Cause Analysis
+**90% of issues are fixed by:**
 
-The setup you ran earlier created wrappers with OLD code that has bugs. The wrappers I just fixed include:
-1. Container detection to prevent recursive entry
-2. Robust distrobox path detection with fallbacks
-3. Better error messages
-
-**You need to regenerate the wrappers with the new code.**
-
-## Step-by-Step Fix
-
-### Step 1: Pull Latest Changes
-```bash
-cd ~/bazzite-node-setup
-git pull origin claude/fix-distrobox-container-error-011CV5PVWhhuDwgy9LRmYXww
-```
-
-### Step 2: Run Diagnostic (Optional but Recommended)
-This will help identify the current state:
-```bash
-./diagnose.sh 2>&1 | tee diagnostic-output.txt
-```
-
-**Please share the output with me** so I can see exactly what's wrong.
-
-### Step 3: Re-run Setup to Regenerate Wrappers
 ```bash
 ./setup.sh
 ```
 
-**Important**: You can skip the interactive prompts by just pressing Enter to accept defaults.
+Just run it. It's safe, idempotent, and fixes most problems.
 
-### Step 4: Test on Host
+---
+
+## Quick Checks
+
+### Are wrappers working?
+
 ```bash
-# Test that tools work on host
 node -v
-npm -v
-pnpm -v
-git --version
-gh --version
 ```
 
-You should see version numbers, not errors or silence.
+If you see a version number: **✓ Working**
+If you see nothing or an error: **✗ Run `./setup.sh` again**
 
-### Step 5: Test Inside Container
+### Did you restart your terminal?
+
 ```bash
-# Enter container
-distrobox enter main-dev
-
-# Test tools (should work without "distrobox: command not found")
+# Close terminal and open a new one, then:
 node -v
-npm -v
-git --version
-
-# Exit container
-exit
 ```
 
-## Quick Diagnostic Commands
+PATH changes require a new shell session.
 
-### Check #1: Is ~/.local/bin in your PATH?
-```bash
-echo $PATH | grep -o "$HOME/.local/bin"
-```
+### Is distrobox installed?
 
-If nothing, restart terminal or run: `source ~/.bashrc`
-
-### Check #2: Are wrappers executable?
-```bash
-ls -l ~/.local/bin/node
-```
-
-### Check #3: Is distrobox available?
 ```bash
 which distrobox
 ```
 
-### Check #4: Does container exist?
+Should show: `/usr/bin/distrobox` or similar
+
+### Does the container exist?
+
 ```bash
 distrobox list | grep main-dev
 ```
 
-### Check #5: Manual wrapper test
+Should show the `main-dev` container running
+
+---
+
+## Common Problems
+
+### Problem: "node -v" shows nothing
+
+**Solution:**
 ```bash
-bash -x ~/.local/bin/node -v 2>&1 | head -50
+./setup.sh  # Re-run setup
+# Then restart terminal
+node -v
 ```
 
-This shows exactly where it fails.
+### Problem: "distrobox: command not found" inside container
 
-## Alternative: Manual Wrapper Regeneration
-
-Don't want to re-run full setup? Regenerate just the wrappers:
-
+**Solution:**
 ```bash
-cd ~/bazzite-node-setup
-source modules/common.sh
-source modules/export-tools.sh
-export CONTAINER_NAME="main-dev"
-export INSTALL_NODEJS=true
-export INSTALL_GIT=true
-export INSTALL_GITHUB_CLI=true
-export INSTALL_PYTHON=true
-export_all_tools
+./setup.sh  # Wrappers now have container detection
 ```
 
-## Need More Help?
+This was a bug in old wrappers. Re-running setup fixes it.
 
-Run diagnostic and share output:
+### Problem: Wrappers timeout or hang
+
+**Solution:**
 ```bash
-./diagnose.sh 2>&1 | tee diagnostic-output.txt
+./setup.sh  # Gets latest wrapper code
 ```
 
-Then share the `diagnostic-output.txt` content.
+### Problem: "Bad substitution" error
+
+**Solution:**
+```bash
+git pull  # Get latest fixes
+./setup.sh
+```
+
+This was fixed in recent commits.
+
+---
+
+## Diagnostic Tool
+
+For detailed information about your setup:
+
+```bash
+./diagnose.sh
+```
+
+This checks:
+- PATH configuration
+- Wrapper file existence
+- Distrobox availability
+- Container status
+- Wrapper content
+
+---
+
+## Manual Checks
+
+### Check wrapper has new code:
+
+```bash
+head -50 ~/.local/bin/node
+```
+
+Look for: `"CRITICAL: Check if we're already inside the target container"`
+
+If missing: Run `./setup.sh`
+
+### Test wrapper manually:
+
+```bash
+bash -x ~/.local/bin/node -v 2>&1 | head -30
+```
+
+Shows exactly what the wrapper is doing.
+
+### Test directly in container:
+
+```bash
+distrobox enter main-dev -- /usr/bin/node -v
+```
+
+Should show version, not error.
+
+---
+
+## Still Stuck?
+
+1. **Run setup again:**
+   ```bash
+   ./setup.sh
+   ```
+
+2. **Check diagnostic:**
+   ```bash
+   ./diagnose.sh > diag.txt
+   cat diag.txt
+   ```
+
+3. **Verify container is running:**
+   ```bash
+   distrobox list
+   podman ps -a | grep main-dev
+   ```
+
+4. **Try entering container directly:**
+   ```bash
+   distrobox enter main-dev
+   which node
+   node -v
+   exit
+   ```
+
+5. **Read the detailed docs:**
+   - FIXES_CONTAINER_ERRORS.md - What was broken
+   - QUICK_FIX.md - Specific fixes
+
+---
+
+## Why Does Running setup.sh Again Work?
+
+setup.sh is **idempotent** - it:
+- Detects existing container (doesn't recreate)
+- Regenerates wrappers with latest code
+- Forces fresh function loading (no bash caching)
+- Updates shell configuration if needed
+
+It's safe to run multiple times.
+
+---
+
+## Technical Details
+
+### How wrappers work:
+
+1. Check if already inside target container → exec native binary
+2. Find distrobox (multiple fallback locations)
+3. Run `distrobox enter container -- binary args`
+4. Process management (cleanup on exit)
+
+### Container detection:
+
+Wrappers check `$CONTAINER_ID` environment variable to prevent recursion.
+
+### Distrobox path detection:
+
+Tries these in order:
+1. Setup-time detected path
+2. Current PATH
+3. `/usr/bin/distrobox`
+4. `/usr/local/bin/distrobox`
+5. `/home/linuxbrew/.linuxbrew/bin/distrobox`
+
+---
+
+**Remember: ./setup.sh fixes almost everything**

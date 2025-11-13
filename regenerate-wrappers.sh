@@ -1,8 +1,21 @@
 #!/usr/bin/env bash
 ################################################################################
-# Standalone Wrapper Regeneration Script
-# This script forces a fresh regeneration of all tool wrappers with the latest
-# fixes, bypassing any bash function caching issues.
+# DEPRECATED: This script is no longer needed
+# setup.sh now properly handles function reloading
+#
+# Just run: ./setup.sh
+################################################################################
+
+echo "⚠️  This script is deprecated."
+echo ""
+echo "Please run: ./setup.sh instead"
+echo ""
+echo "setup.sh now properly regenerates wrappers automatically."
+exit 1
+
+################################################################################
+# Legacy Standalone Wrapper Regeneration Script
+# Kept for reference only - DO NOT USE
 ################################################################################
 
 set -euo pipefail
