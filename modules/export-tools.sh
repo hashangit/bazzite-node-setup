@@ -262,12 +262,12 @@ export_git_tools() {
     local git_path
     git_path=$(distrobox enter "$CONTAINER_NAME" -- which git 2>/dev/null | tr -d '\r\n' | xargs)
 
-    # Git doesn't run dev servers - use standard distrobox-export (no process management needed)
+    # Use wrapper-based export for consistency (works on all systems)
     if [ -n "$git_path" ] && [[ "$git_path" =~ ^/ ]]; then
-        if export_with_distrobox "$git_path" "$CONTAINER_NAME"; then
+        if export_binary_with_wrapper "git" "$git_path" "$CONTAINER_NAME"; then
             local git_version
-            git_version=$(timeout 5 "$HOME/.local/bin/git" --version 2>&1 | grep -oP '\d+\.\d+\.\d+' | head -1 || echo "unknown")
-            log_success "Git $git_version exported (distrobox-export)"
+            git_version=$(distrobox enter "$CONTAINER_NAME" -- git --version 2>&1 | grep -oP '\d+\.\d+\.\d+' | head -1 || echo "unknown")
+            log_success "Git $git_version exported"
             record_tool_status "git" "success" "$git_version"
             return 0
         fi
@@ -289,12 +289,12 @@ export_github_cli() {
     local gh_path
     gh_path=$(distrobox enter "$CONTAINER_NAME" -- which gh 2>/dev/null | tr -d '\r\n' | xargs)
 
-    # GitHub CLI doesn't run dev servers - use standard distrobox-export (no process management needed)
+    # Use wrapper-based export for consistency (works on all systems)
     if [ -n "$gh_path" ] && [[ "$gh_path" =~ ^/ ]]; then
-        if export_with_distrobox "$gh_path" "$CONTAINER_NAME"; then
+        if export_binary_with_wrapper "gh" "$gh_path" "$CONTAINER_NAME"; then
             local gh_version
-            gh_version=$(timeout 5 "$HOME/.local/bin/gh" --version 2>&1 | head -1 | grep -oP '\d+\.\d+\.\d+' || echo "unknown")
-            log_success "GitHub CLI $gh_version exported (distrobox-export)"
+            gh_version=$(distrobox enter "$CONTAINER_NAME" -- gh --version 2>&1 | head -1 | grep -oP '\d+\.\d+\.\d+' || echo "unknown")
+            log_success "GitHub CLI $gh_version exported"
             record_tool_status "gh" "success" "$gh_version"
             return 0
         fi
