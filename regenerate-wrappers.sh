@@ -1,21 +1,11 @@
 #!/usr/bin/env bash
 ################################################################################
-# DEPRECATED: This script is no longer needed
-# setup.sh now properly handles function reloading
+# Standalone Wrapper Regeneration Script
 #
-# Just run: ./setup.sh
-################################################################################
-
-echo "⚠️  This script is deprecated."
-echo ""
-echo "Please run: ./setup.sh instead"
-echo ""
-echo "setup.sh now properly regenerates wrappers automatically."
-exit 1
-
-################################################################################
-# Legacy Standalone Wrapper Regeneration Script
-# Kept for reference only - DO NOT USE
+# This script regenerates tool wrappers without re-running full setup.
+# Useful for fixing export issues after updates.
+#
+# Usage: ./regenerate-wrappers.sh
 ################################################################################
 
 set -euo pipefail
@@ -23,9 +13,18 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CONTAINER_NAME="main-dev"
 
+# Colors for output
+GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
+RED='\033[0;31m'
+NC='\033[0m' # No Color
+
 echo "================================================"
-echo " Standalone Wrapper Regeneration"
+echo " Wrapper Regeneration Tool"
 echo "================================================"
+echo ""
+echo "This will regenerate wrappers for all installed tools"
+echo "in your $CONTAINER_NAME container."
 echo ""
 
 # Detect distrobox path
@@ -178,25 +177,47 @@ $DISTROBOX_PATH enter "$CONTAINER_NAME" -- bash -c "[ -f $UV_PATH ]" 2>/dev/null
 
 echo ""
 echo "================================================"
-echo " Results: $SUCCESS wrappers created, $FAILED failed"
+if [ $FAILED -eq 0 ]; then
+    echo -e " ${GREEN}✓ Results: $SUCCESS wrappers created successfully${NC}"
+else
+    echo -e " ${YELLOW}⚠ Results: $SUCCESS created, $FAILED failed${NC}"
+fi
 echo "================================================"
 echo ""
 
 if [ $SUCCESS -gt 0 ]; then
-    echo "Testing a wrapper..."
-    if timeout 5 "$HOME/.local/bin/node" -v &>/dev/null; then
-        echo "✓ node wrapper works!"
-    else
-        echo "⚠ node wrapper exists but test failed"
-        echo "  Try: bash -x ~/.local/bin/node -v"
+    echo "Testing wrappers..."
+
+    # Test node if available
+    if [ -x "$HOME/.local/bin/node" ]; then
+        if timeout 5 "$HOME/.local/bin/node" -v &>/dev/null; then
+            echo -e "${GREEN}✓${NC} node wrapper works!"
+        else
+            echo -e "${YELLOW}⚠${NC} node wrapper exists but test timed out"
+            echo "  This might be normal on first run. Try: node -v"
+        fi
     fi
+
     echo ""
-    echo "All wrappers regenerated successfully!"
+    echo -e "${GREEN}Wrappers regenerated!${NC}"
     echo ""
     echo "Next steps:"
-    echo "1. Test: node -v"
-    echo "2. Test in container: distrobox enter $CONTAINER_NAME && node -v"
-    echo "3. Run full verification: ./verify-setup.sh"
+    echo "1. Restart your terminal or run: source ~/.bashrc"
+    echo "2. Test tools from host: node -v, npm -v, git -v, gh -v"
+    echo "3. Test tools in container: distrobox enter $CONTAINER_NAME"
+    echo "4. Run full verification: ./verify-setup.sh"
+    echo ""
+    echo -e "${YELLOW}Note:${NC} If pnpm hangs, enter the container and run:"
+    echo "   distrobox enter $CONTAINER_NAME"
+    echo "   pnpm --version  # to test it directly"
+else
+    echo -e "${RED}No wrappers were created!${NC}"
+    echo ""
+    echo "Possible issues:"
+    echo "1. Container '$CONTAINER_NAME' doesn't exist or isn't running"
+    echo "2. Tools aren't installed in the container"
+    echo ""
+    echo "Try running: ./setup.sh"
 fi
 
 exit 0

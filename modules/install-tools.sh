@@ -174,44 +174,54 @@ install_pnpm() {
     local install_pnpm='
         set -e
 
-        # Check if already installed
-        if command -v pnpm &> /dev/null; then
-            echo "pnpm already installed"
+        # Ensure directories exist
+        mkdir -p "$HOME/.local/bin"
+        mkdir -p "$HOME/.local/share/pnpm"
+
+        # Check if already installed and working
+        if command -v pnpm &> /dev/null && pnpm --version &> /dev/null; then
+            echo "pnpm already installed and working"
             pnpm --version
             exit 0
         fi
 
-        # Ensure ~/.local/bin exists
-        mkdir -p "$HOME/.local/bin"
-
-        # PRIMARY METHOD: Corepack with user directory (NO SUDO NEEDED!)
-        # This avoids permission issues by installing to user directory
-        echo "Enabling pnpm via Corepack (user directory)..."
-        if corepack enable --install-directory "$HOME/.local/bin" 2>/dev/null; then
-            # Add to PATH for this session
-            export PATH="$HOME/.local/bin:$PATH"
-
-            # Verify installation
-            if pnpm --version 2>/dev/null; then
-                echo "✓ pnpm installed via Corepack"
-                pnpm --version
-                exit 0
-            fi
-        fi
-
-        # FALLBACK: Standalone installer if Corepack fails
-        echo "Corepack method failed, using standalone installer..."
+        # PRIMARY METHOD: Standalone installer (more reliable than Corepack)
+        echo "Installing pnpm via standalone installer..."
         curl -fsSL https://get.pnpm.io/install.sh | sh -
 
-        # Reload PATH and verify
+        # Configure environment for immediate use
         export PNPM_HOME="$HOME/.local/share/pnpm"
         export PATH="$PNPM_HOME:$PATH"
+
+        # Add pnpm to shell RC files for persistence
+        for rc_file in "$HOME/.bashrc" "$HOME/.zshrc" "$HOME/.profile"; do
+            if [ -f "$rc_file" ] && ! grep -q "PNPM_HOME" "$rc_file"; then
+                echo "" >> "$rc_file"
+                echo "# pnpm configuration" >> "$rc_file"
+                echo "export PNPM_HOME=\"\$HOME/.local/share/pnpm\"" >> "$rc_file"
+                echo "export PATH=\"\$PNPM_HOME:\$PATH\"" >> "$rc_file"
+            fi
+        done
+
+        # Verify installation
+        if ! command -v pnpm &> /dev/null; then
+            echo "ERROR: pnpm command not found after installation"
+            exit 1
+        fi
+
+        # Test that pnpm works
+        if ! pnpm --version &> /dev/null; then
+            echo "ERROR: pnpm installed but not working"
+            exit 1
+        fi
+
+        echo "✓ pnpm installed successfully"
         pnpm --version
     '
 
     if distrobox enter "$CONTAINER_NAME" -- bash -c "$install_pnpm" >> "$LOG_FILE" 2>&1; then
         local pnpm_version
-        pnpm_version=$(distrobox enter "$CONTAINER_NAME" -- bash -lc "pnpm --version" 2>&1 || echo "unknown")
+        pnpm_version=$(distrobox enter "$CONTAINER_NAME" -- bash -lc "pnpm --version" 2>&1 | head -1 | tr -d '\r\n' || echo "unknown")
         log_success "pnpm $pnpm_version installed"
         record_tool_status "pnpm" "success" "$pnpm_version"
         return 0
