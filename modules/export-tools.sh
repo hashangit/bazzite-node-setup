@@ -151,16 +151,39 @@ export_nodejs_tools() {
     local failed=0
 
     # Get Node.js binary paths
+    # IMPORTANT: Use explicit paths to avoid finding wrappers in ~/.local/bin
     # node, npm, npx: installed via NodeSource at /usr/bin
-    # pnpm: may be in ~/.local/bin (Corepack) or ~/.local/share/pnpm (standalone)
+    # pnpm: installed via standalone installer at ~/.local/share/pnpm
     local node_path npm_path npx_path pnpm_path
 
-    node_path=$(distrobox enter "$CONTAINER_NAME" -- which node 2>/dev/null | tr -d '\r\n' | xargs)
-    npm_path=$(distrobox enter "$CONTAINER_NAME" -- which npm 2>/dev/null | tr -d '\r\n' | xargs)
-    npx_path=$(distrobox enter "$CONTAINER_NAME" -- which npx 2>/dev/null | tr -d '\r\n' | xargs)
+    # NodeSource installs to /usr/bin - use explicit paths
+    node_path="/usr/bin/node"
+    npm_path="/usr/bin/npm"
+    npx_path="/usr/bin/npx"
 
-    # Use login shell for pnpm to ensure PATH includes ~/.local/bin and ~/.local/share/pnpm
-    pnpm_path=$(distrobox enter "$CONTAINER_NAME" -- bash -lc "which pnpm" 2>/dev/null | tr -d '\r\n' | xargs)
+    # pnpm standalone installer location
+    pnpm_path="$HOME/.local/share/pnpm/pnpm"
+
+    # Verify each path exists in container
+    for tool_var in node_path npm_path npx_path; do
+        local path_val="${!tool_var}"
+        if ! distrobox enter "$CONTAINER_NAME" -- test -x "$path_val" 2>/dev/null; then
+            log_warn "$tool_var: $path_val not found or not executable in container"
+            eval "$tool_var=''"
+        fi
+    done
+
+    # pnpm needs special check since it's in user directory
+    if ! distrobox enter "$CONTAINER_NAME" -- test -x "$pnpm_path" 2>/dev/null; then
+        log_warn "pnpm not found at $pnpm_path, checking alternatives..."
+        # Try alternate locations
+        for alt in "$HOME/.local/bin/pnpm" "/usr/local/bin/pnpm"; do
+            if distrobox enter "$CONTAINER_NAME" -- test -x "$alt" 2>/dev/null; then
+                pnpm_path="$alt"
+                break
+            fi
+        done
+    fi
 
     # Validate and export node with process management
     if [ -n "$node_path" ] && [[ "$node_path" =~ ^/ ]]; then
@@ -255,8 +278,15 @@ export_git_tools() {
 
     log_step "Exporting Git..."
 
-    local git_path
-    git_path=$(distrobox enter "$CONTAINER_NAME" -- which git 2>/dev/null | tr -d '\r\n' | xargs)
+    # Git is installed to /usr/bin via container dependencies
+    local git_path="/usr/bin/git"
+
+    # Verify it exists in container
+    if ! distrobox enter "$CONTAINER_NAME" -- test -x "$git_path" 2>/dev/null; then
+        log_error "Git not found at $git_path in container"
+        record_tool_status "git" "failed" "N/A" "Binary not found"
+        return 1
+    fi
 
     # Use wrapper-based export for consistency (works on all systems)
     if [ -n "$git_path" ] && [[ "$git_path" =~ ^/ ]]; then
@@ -282,8 +312,15 @@ export_github_cli() {
 
     log_step "Exporting GitHub CLI..."
 
-    local gh_path
-    gh_path=$(distrobox enter "$CONTAINER_NAME" -- which gh 2>/dev/null | tr -d '\r\n' | xargs)
+    # GitHub CLI is installed to /usr/bin via apt
+    local gh_path="/usr/bin/gh"
+
+    # Verify it exists in container
+    if ! distrobox enter "$CONTAINER_NAME" -- test -x "$gh_path" 2>/dev/null; then
+        log_error "GitHub CLI not found at $gh_path in container"
+        record_tool_status "gh" "failed" "N/A" "Binary not found"
+        return 1
+    fi
 
     # Use wrapper-based export for consistency (works on all systems)
     if [ -n "$gh_path" ] && [[ "$gh_path" =~ ^/ ]]; then

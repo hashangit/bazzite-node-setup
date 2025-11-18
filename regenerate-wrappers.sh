@@ -142,16 +142,47 @@ WRAPPER_EOF
 }
 
 # Get tool paths from container
+# IMPORTANT: Use explicit paths to avoid finding wrappers in ~/.local/bin
 echo "Detecting tool paths in container..."
-NODE_PATH=$($DISTROBOX_PATH enter "$CONTAINER_NAME" -- which node 2>/dev/null | tr -d '\r\n' || echo "")
-NPM_PATH=$($DISTROBOX_PATH enter "$CONTAINER_NAME" -- which npm 2>/dev/null | tr -d '\r\n' || echo "")
-NPX_PATH=$($DISTROBOX_PATH enter "$CONTAINER_NAME" -- which npx 2>/dev/null | tr -d '\r\n' || echo "")
-PNPM_PATH=$($DISTROBOX_PATH enter "$CONTAINER_NAME" -- bash -lc "which pnpm" 2>/dev/null | tr -d '\r\n' || echo "")
+
+# NodeSource installs to /usr/bin
+NODE_PATH="/usr/bin/node"
+NPM_PATH="/usr/bin/npm"
+NPX_PATH="/usr/bin/npx"
+
+# pnpm standalone installer location
+PNPM_PATH="$HOME/.local/share/pnpm/pnpm"
+
+# Bun installer location
 BUN_PATH="$HOME/.bun/bin/bun"
 BUNX_PATH="$HOME/.bun/bin/bunx"
-GIT_PATH=$($DISTROBOX_PATH enter "$CONTAINER_NAME" -- which git 2>/dev/null | tr -d '\r\n' || echo "")
-GH_PATH=$($DISTROBOX_PATH enter "$CONTAINER_NAME" -- which gh 2>/dev/null | tr -d '\r\n' || echo "")
+
+# System tools
+GIT_PATH="/usr/bin/git"
+GH_PATH="/usr/bin/gh"
+
+# UV location (shared between host and container)
 UV_PATH="$HOME/.local/bin/uv"
+
+# Verify paths exist in container
+echo "Verifying binary paths..."
+for tool_name in NODE_PATH NPM_PATH NPX_PATH GIT_PATH GH_PATH; do
+    tool_path="${!tool_name}"
+    if ! $DISTROBOX_PATH enter "$CONTAINER_NAME" -- test -x "$tool_path" 2>/dev/null; then
+        echo "  Warning: $tool_name ($tool_path) not found"
+        eval "$tool_name=''"
+    else
+        echo "  ✓ $tool_name: $tool_path"
+    fi
+done
+
+# Check pnpm (user directory)
+if ! $DISTROBOX_PATH enter "$CONTAINER_NAME" -- test -x "$PNPM_PATH" 2>/dev/null; then
+    echo "  Warning: pnpm not found at $PNPM_PATH"
+    PNPM_PATH=""
+else
+    echo "  ✓ pnpm: $PNPM_PATH"
+fi
 
 echo ""
 echo "Generating wrappers..."
