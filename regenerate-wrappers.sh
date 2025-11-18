@@ -90,41 +90,37 @@ set -m
 # Track the background process PID
 CHILD_PID=""
 
-# Cleanup function to kill process tree
+# Cleanup function to kill process tree (for signals only)
 cleanup() {
     if [ -n "$CHILD_PID" ]; then
-        # Kill the entire process group
-        kill -- -$CHILD_PID 2>/dev/null || true
-        # Wait a moment for graceful shutdown
-        sleep 0.5
-        # Force kill if still alive
-        kill -9 -- -$CHILD_PID 2>/dev/null || true
+        # Only kill if process is still running
+        if kill -0 $CHILD_PID 2>/dev/null; then
+            # Kill the entire process group
+            kill -- -$CHILD_PID 2>/dev/null || true
+            # Wait a moment for graceful shutdown
+            sleep 0.5
+            # Force kill if still alive
+            kill -9 -- -$CHILD_PID 2>/dev/null || true
+        fi
     fi
-    exit
 }
 
-# Trap all terminal close signals
-trap cleanup EXIT TERM INT HUP QUIT
+# Trap signals to cleanup on abnormal termination
+# Do NOT trap EXIT - we handle exit normally below
+trap cleanup TERM INT HUP QUIT
 
 # Run command in container as background process (NOT exec!)
 # This preserves the wrapper shell and its trap handlers
 "$DISTROBOX_CMD" enter -n "CONTAINER_NAME" -- "BINARY_PATH" "$@" &
 CHILD_PID=$!
 
-# Verify process started (wait briefly and check)
-sleep 0.1
-if ! kill -0 $CHILD_PID 2>/dev/null; then
-    echo "Error: Failed to start TOOL_NAME in container" >&2
-    exit 1
-fi
-
 # Wait for the process to complete
 # This blocks but allows traps to work
 wait $CHILD_PID
 EXIT_CODE=$?
 
-# Clean up and exit with same code
-cleanup
+# Exit with the same code as the container command
+# Do NOT call cleanup here - the process has already finished naturally
 exit $EXIT_CODE
 WRAPPER_EOF
 
