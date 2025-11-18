@@ -31,36 +31,7 @@ export_binary_with_wrapper() {
         return 1
     fi
 
-    # CRITICAL: Handle binaries installed in $HOME to prevent wrapper from overwriting them
-    # In distrobox, $HOME is shared between host and container
-    # If we create a wrapper at the same path as the binary, we destroy the binary
-    local actual_binary_path="$binary_path"
-    if [[ "$binary_path" == "$HOME"* ]] || [[ "$binary_path" == "\$HOME"* ]]; then
-        log "Binary is in \$HOME - moving to safe location to prevent overwrite..."
-
-        # Create directory for actual binaries
-        mkdir -p "$HOME/.local/bin/.real" 2>/dev/null
-
-        # Move the actual binary to .real subdirectory inside container
-        # This must be done BEFORE creating the wrapper to avoid overwriting
-        local real_path="$HOME/.local/bin/.real/$tool_name"
-        if distrobox enter "$container" -- bash -c "[ -f '$binary_path' ] && mv '$binary_path' '$real_path'" 2>/dev/null; then
-            log "Moved actual binary: $binary_path -> $real_path"
-            actual_binary_path="$real_path"
-        else
-            log_warn "Could not move binary (may not exist or already moved)"
-            # Check if it's already in .real location
-            if distrobox enter "$container" -- bash -c "[ -f '$real_path' ]" 2>/dev/null; then
-                log "Binary already at safe location: $real_path"
-                actual_binary_path="$real_path"
-            else
-                log_error "Binary not found at either location"
-                return 1
-            fi
-        fi
-    fi
-
-    # Remove existing wrapper if present (safe now that actual binary is moved)
+    # Remove existing wrapper if present
     rm -f "$HOME/.local/bin/$tool_name" 2>/dev/null
 
     # Create process-aware wrapper
@@ -141,10 +112,9 @@ WRAPPER_EOF
 
     # Replace placeholders with actual values
     # Use @ as delimiter to avoid conflicts with paths containing |
-    # IMPORTANT: Use actual_binary_path (not binary_path) which points to .real location if needed
     sed -i "s@TOOL_NAME@$tool_name@g" "$HOME/.local/bin/$tool_name"
     sed -i "s@CONTAINER_NAME@$container@g" "$HOME/.local/bin/$tool_name"
-    sed -i "s@BINARY_PATH@$actual_binary_path@g" "$HOME/.local/bin/$tool_name"
+    sed -i "s@BINARY_PATH@$binary_path@g" "$HOME/.local/bin/$tool_name"
     sed -i "s@DISTROBOX_PATH@$distrobox_path@g" "$HOME/.local/bin/$tool_name"
 
     chmod +x "$HOME/.local/bin/$tool_name"
@@ -292,18 +262,18 @@ export_git_tools() {
     local git_path
     git_path=$(distrobox enter "$CONTAINER_NAME" -- which git 2>/dev/null | tr -d '\r\n' | xargs)
 
-    # Validate path
+    # Git doesn't run dev servers - use standard distrobox-export (no process management needed)
     if [ -n "$git_path" ] && [[ "$git_path" =~ ^/ ]]; then
-        if export_binary_with_wrapper "git" "$git_path" "$CONTAINER_NAME"; then
+        if export_with_distrobox "$git_path" "$CONTAINER_NAME"; then
             local git_version
-            git_version=$(timeout 5 distrobox enter "$CONTAINER_NAME" -- git --version 2>&1 | grep -oP '\d+\.\d+\.\d+' | head -1 || echo "unknown")
-            log_success "Git $git_version exported"
+            git_version=$(timeout 5 "$HOME/.local/bin/git" --version 2>&1 | grep -oP '\d+\.\d+\.\d+' | head -1 || echo "unknown")
+            log_success "Git $git_version exported (distrobox-export)"
             record_tool_status "git" "success" "$git_version"
             return 0
         fi
     fi
 
-    log_error "Failed to export Git - path not found or invalid"
+    log_error "Failed to export Git - path not found or export failed"
     record_tool_status "git" "failed" "N/A" "Export failed"
     return 1
 }
@@ -319,18 +289,18 @@ export_github_cli() {
     local gh_path
     gh_path=$(distrobox enter "$CONTAINER_NAME" -- which gh 2>/dev/null | tr -d '\r\n' | xargs)
 
-    # Validate path
+    # GitHub CLI doesn't run dev servers - use standard distrobox-export (no process management needed)
     if [ -n "$gh_path" ] && [[ "$gh_path" =~ ^/ ]]; then
-        if export_binary_with_wrapper "gh" "$gh_path" "$CONTAINER_NAME"; then
+        if export_with_distrobox "$gh_path" "$CONTAINER_NAME"; then
             local gh_version
-            gh_version=$(timeout 5 distrobox enter "$CONTAINER_NAME" -- gh --version 2>&1 | head -1 | grep -oP '\d+\.\d+\.\d+' || echo "unknown")
-            log_success "GitHub CLI $gh_version exported"
+            gh_version=$(timeout 5 "$HOME/.local/bin/gh" --version 2>&1 | head -1 | grep -oP '\d+\.\d+\.\d+' || echo "unknown")
+            log_success "GitHub CLI $gh_version exported (distrobox-export)"
             record_tool_status "gh" "success" "$gh_version"
             return 0
         fi
     fi
 
-    log_error "Failed to export GitHub CLI - path not found or invalid"
+    log_error "Failed to export GitHub CLI - path not found or export failed"
     record_tool_status "gh" "failed" "N/A" "Export failed"
     return 1
 }
@@ -341,25 +311,26 @@ export_python_tools() {
         return 0
     fi
 
-    log_step "Exporting Python tools..."
+    log_step "Verifying Python tools accessibility..."
 
     local uv_path="$HOME/.local/bin/uv"
 
-    # Check if UV binary exists in container (original location or .real location)
-    if distrobox enter "$CONTAINER_NAME" -- bash -c "[ -f $uv_path ] || [ -f $HOME/.local/bin/.real/uv ]" 2>/dev/null; then
-        if export_binary_with_wrapper "uv" "$uv_path" "$CONTAINER_NAME"; then
-            local uv_version
-            # Add timeout to prevent infinite hang
-            # Try the wrapper first (should work now that binary is in .real)
-            uv_version=$(timeout 10 distrobox enter "$CONTAINER_NAME" -- bash -lc "uv --version" 2>&1 | grep -oP '\d+\.\d+\.\d+' || echo "unknown")
-            log_success "UV $uv_version exported"
-            record_tool_status "uv" "success" "$uv_version"
-            return 0
-        fi
+    # UV installs to $HOME/.local/bin which is SHARED between host and container
+    # Since we add $HOME/.local/bin to host PATH, UV is already accessible
+    # Creating a wrapper would OVERWRITE the binary (same location!)
+    # So we just verify it exists and is accessible
+
+    if [ -f "$uv_path" ] && [ -x "$uv_path" ]; then
+        local uv_version
+        # Test directly from host (no wrapper needed!)
+        uv_version=$("$uv_path" --version 2>&1 | grep -oP '\d+\.\d+\.\d+' || echo "unknown")
+        log_success "UV $uv_version accessible at $uv_path (no wrapper needed - shared location)"
+        record_tool_status "uv" "success" "$uv_version"
+        return 0
     fi
 
-    log_error "Failed to export UV - not found or export failed"
-    record_tool_status "uv" "failed" "N/A" "Export failed"
+    log_error "UV not found or not executable at $uv_path"
+    record_tool_status "uv" "failed" "N/A" "Binary not accessible"
     return 1
 }
 
