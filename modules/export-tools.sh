@@ -66,44 +66,10 @@ else
     exit 127
 fi
 
-# Create a process group so we can kill all children
-set -m
-
-# Track the background process PID
-CHILD_PID=""
-
-# Cleanup function to kill process tree (for signals only)
-cleanup() {
-    if [ -n "$CHILD_PID" ]; then
-        # Only kill if process is still running
-        if kill -0 $CHILD_PID 2>/dev/null; then
-            # Kill the entire process group
-            kill -- -$CHILD_PID 2>/dev/null || true
-            # Wait a moment for graceful shutdown
-            sleep 0.5
-            # Force kill if still alive
-            kill -9 -- -$CHILD_PID 2>/dev/null || true
-        fi
-    fi
-}
-
-# Trap signals to cleanup on abnormal termination
-# Do NOT trap EXIT - we handle exit normally below
-trap cleanup TERM INT HUP QUIT
-
-# Run command in container as background process (NOT exec!)
-# This preserves the wrapper shell and its trap handlers
-"$DISTROBOX_CMD" enter -n "CONTAINER_NAME" -- "BINARY_PATH" "$@" &
-CHILD_PID=$!
-
-# Wait for the process to complete
-# This blocks but allows traps to work
-wait $CHILD_PID
-EXIT_CODE=$?
-
-# Exit with the same code as the container command
-# Do NOT call cleanup here - the process has already finished naturally
-exit $EXIT_CODE
+# Run command in container (foreground, preserves stdio)
+# For simple commands, foreground execution is more reliable
+# Signals (Ctrl+C, etc.) naturally propagate to the container process
+exec "$DISTROBOX_CMD" enter -n "CONTAINER_NAME" -- "BINARY_PATH" "$@"
 WRAPPER_EOF
 
     # Replace placeholders with actual values
