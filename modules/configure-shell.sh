@@ -180,7 +180,8 @@ configure_all_shells() {
     log "Ensuring ~/.local/bin exists and has correct permissions..."
     mkdir -p "$HOME/.local/bin" 2>/dev/null
     chmod 755 "$HOME/.local/bin" 2>/dev/null
-    chown -R "$USER:$USER" "$HOME/.local" 2>/dev/null || true
+    # Note: Removed chown -R as it can hang on large directories and is unnecessary
+    # Files created by the user should already have correct ownership
 
     # Configure each shell
     configure_bash || success=false

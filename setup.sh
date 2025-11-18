@@ -18,6 +18,25 @@
 #
 # IMPORTANT: This script has been thoroughly tested and reviewed.
 # See QA_REVIEW_V3.md and COMPLETION_SUMMARY.md for status and details.
+#
+# TODO: Full Spec Compliance (see SPEC_COMPLIANCE_REVIEW.md)
+# Current compliance: ~40% - Missing critical DX rebase automation
+#
+# HIGH PRIORITY TODOS:
+# 1. [ ] Create modules/detect-bazzite.sh module
+# 2. [ ] Implement Phase 1: Fatal Bazzite OS detection (not just warning)
+# 3. [ ] Implement Phase 2: Proper DX variant detection with JSON parsing
+# 4. [ ] Implement Phase 3: Complete DX rebase flow
+#    - [ ] GPU detection (nvidia/amd/intel)
+#    - [ ] Desktop Environment detection (kde/gnome)
+#    - [ ] DX variant construction
+#    - [ ] Elaborate rebase recommendation UI
+#    - [ ] Automated rebase execution
+# 5. [ ] Enhance tool selection menu with disk space info
+# 6. [ ] Enhance installation summary with system info
+# 7. [ ] Enhance final report with elaborate sections
+#
+# CURRENT WORKAROUND: Users are guided to manually rebase to DX (lines 609-673)
 ################################################################################
 
 set -uo pipefail  # Continue on errors to report them
@@ -606,34 +625,69 @@ main() {
     # Ask about setup mode (update or clean install)
     show_setup_mode_menu
 
-    # Check if user might want Bazzite DX (only if on base Bazzite)
+    # TODO: Implement automated DX rebase flow (Phase 3 of specs.md)
+    # This should include:
+    # - GPU detection (nvidia/amd/intel)
+    # - Desktop Environment detection (kde/gnome)
+    # - DX variant construction (e.g., bazzite-nvidia-dx, bazzite-gnome-dx)
+    # - Elaborate DX recommendation UI
+    # - Automated rebase execution with error handling
+    # See: SPEC_COMPLIANCE_REVIEW.md Phase 3 section
+    # Module: Should be in modules/detect-bazzite.sh (not yet created)
+
+    # Check if user is on base Bazzite (not DX) and provide manual rebase guidance
     if [ -f /etc/os-release ] && grep -qi "bazzite" /etc/os-release; then
         if ! rpm-ostree status 2>/dev/null | grep -qi "dx"; then
             echo ""
             separator
-            echo -e "${YELLOW}${BOLD}💡 Note: Base Bazzite Detected (Not DX)${NC}"
+            echo -e "${YELLOW}${BOLD}💡 Bazzite DX Recommended for Development${NC}"
             echo ""
-            echo "You are running base Bazzite. Bazzite DX includes additional"
-            echo "developer tools and is recommended for development."
+            echo "You are running base Bazzite. Bazzite DX is the developer-focused"
+            echo "variant that includes pre-installed development tools and better"
+            echo "support for building software."
             echo ""
-            echo "v3.0 does not include the DX rebase feature yet."
-            echo -e "To rebase to DX, run: ${CYAN}./setup-dev-container.sh${NC} (v2.0) first,"
-            echo "or manually rebase using rpm-ostree."
+            echo -e "${CYAN}What Bazzite DX includes:${NC}"
+            echo "  • distrobox and podman (container tools)"
+            echo "  • Build essentials (gcc, make, cmake, etc.)"
+            echo "  • Git and development libraries"
+            echo "  • Fish shell, direnv, and just"
             echo ""
-            echo -en "Continue with v3.0 setup anyway? (Y/n): "
+            echo -e "${CYAN}To manually rebase to Bazzite DX:${NC}"
+            echo ""
+            echo "  1. Determine your variant (check GPU and Desktop):"
+            echo "     - KDE + AMD/Intel:  bazzite-dx"
+            echo "     - KDE + NVIDIA:     bazzite-nvidia-dx"
+            echo "     - GNOME + AMD/Intel: bazzite-gnome-dx"
+            echo "     - GNOME + NVIDIA:   bazzite-gnome-nvidia-dx"
+            echo ""
+            echo "  2. Run the rebase command (example for nvidia):"
+            echo -e "     ${CYAN}rpm-ostree rebase ostree-image-signed:docker://ghcr.io/ublue-os/bazzite-nvidia-dx:stable${NC}"
+            echo ""
+            echo "  3. Reboot your system"
+            echo ""
+            echo "  4. Re-run this setup script after reboot"
+            echo ""
+            separator
+            echo ""
+            echo -en "Continue with setup on base Bazzite? (Y/n): "
             read -r response
             case $response in
                 [Nn]* )
                     echo ""
-                    echo "Setup cancelled. Run ./setup-dev-container.sh for DX rebase."
+                    echo "Setup cancelled. Please rebase to Bazzite DX and re-run this script."
                     exit 0
                     ;;
                 * )
-                    log "User chose to continue without DX rebase"
+                    log "User chose to continue on base Bazzite without DX rebase"
                     ;;
             esac
             separator
             echo ""
+        else
+            # Running on DX variant
+            local dx_variant
+            dx_variant=$(rpm-ostree status 2>/dev/null | grep -oP 'bazzite[^ ]*-dx' | head -1 || echo "bazzite-dx")
+            log_success "Running on Bazzite DX variant: $dx_variant"
         fi
     fi
 
